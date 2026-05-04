@@ -1,0 +1,798 @@
+{
+  "info": {
+    "name": "Alerta Vigia API",
+    "description": "Coleção completa da API do Alerta Vigia. Configure a variável `baseUrl` (padrão http://localhost:3001) e execute primeiro o login para popular `token` automaticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "alerta-vigia-collection-v2"
+  },
+  "variable": [
+    { "key": "baseUrl",        "value": "http://localhost:3001",                         "type": "string" },
+    { "key": "token",          "value": "",                                               "type": "string", "description": "JWT do tenant (preenchido pelo script de login)" },
+    { "key": "superToken",     "value": "",                                               "type": "string", "description": "JWT do superadmin (preenchido pelo script de login)" },
+    { "key": "pontoId",        "value": "",                                               "type": "string", "description": "Preenchido ao listar pontos" },
+    { "key": "vigilanteId",    "value": "",                                               "type": "string", "description": "Preenchido ao listar vigilantes" },
+    { "key": "agendaId",       "value": "",                                               "type": "string" },
+    { "key": "cameraId",       "value": "",                                               "type": "string" },
+    { "key": "clienteId",      "value": "",                                               "type": "string" },
+    { "key": "planoId",        "value": "",                                               "type": "string" },
+    { "key": "agentKeyPonto",  "value": "av_test_ponto1portariaprincipal000000000",       "type": "string", "description": "agentKey do ponto (obtido em Config completa)" },
+    { "key": "eventoId",       "value": "",                                               "type": "string", "description": "Preenchido ao listar eventos" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login — Tenant",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.token) { pm.collectionVariables.set('token', json.token); }",
+            "pm.test('Login OK', () => pm.response.to.have.status(200));"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@segurancatotal.com.br\",\n  \"senha\": \"Admin@2024!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] }
+          }
+        },
+        {
+          "name": "Login — Superadmin",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.token) { pm.collectionVariables.set('superToken', json.token); }",
+            "pm.test('Login OK', () => pm.response.to.have.status(200));"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@alertavigia.com.br\",\n  \"senha\": \"Admin@2024!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"<refresh_token>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth","refresh"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth","logout"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📍 Pontos",
+      "item": [
+        {
+          "name": "Listar pontos",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('pontoId', json[0].id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos", "host": ["{{baseUrl}}"], "path": ["pontos"] }
+          }
+        },
+        {
+          "name": "Criar ponto",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Novo Ponto\",\n  \"descricao\": \"Descrição do ponto\",\n  \"endereco\": \"Rua Exemplo, 123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/pontos", "host": ["{{baseUrl}}"], "path": ["pontos"] }
+          }
+        },
+        {
+          "name": "Buscar ponto",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}"] }
+          }
+        },
+        {
+          "name": "Atualizar ponto",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Nome Atualizado\",\n  \"descricao\": \"Nova descrição\"\n}" },
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}"] }
+          }
+        },
+        {
+          "name": "Desativar ponto",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}"] }
+          }
+        },
+        {
+          "name": "Regenerar agentKey do ponto",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.agentKey) { pm.collectionVariables.set('agentKeyPonto', json.agentKey); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}/agentkey/regenerar", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}","agentkey","regenerar"] }
+          }
+        },
+        {
+          "name": "Listar agendas do ponto",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}/agendas", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}","agendas"] }
+          }
+        },
+        {
+          "name": "Criar agenda",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('agendaId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"diasSemana\": [1, 2, 3, 4, 5],\n  \"horaInicio\": \"08:00\",\n  \"horaFim\": \"18:00\"\n}" },
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}/agendas", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}","agendas"] }
+          }
+        },
+        {
+          "name": "Atualizar agenda",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"diasSemana\": [1, 2, 3, 4, 5],\n  \"horaInicio\": \"07:00\",\n  \"horaFim\": \"19:00\",\n  \"ativo\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}/agendas/{{agendaId}}", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}","agendas","{{agendaId}}"] }
+          }
+        },
+        {
+          "name": "Excluir agenda",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/pontos/{{pontoId}}/agendas/{{agendaId}}", "host": ["{{baseUrl}}"], "path": ["pontos","{{pontoId}}","agendas","{{agendaId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👮 Vigilantes",
+      "item": [
+        {
+          "name": "Listar vigilantes",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('vigilanteId', json[0].id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vigilantes", "host": ["{{baseUrl}}"], "path": ["vigilantes"] }
+          }
+        },
+        {
+          "name": "Criar vigilante",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('vigilanteId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Carlos Silva\",\n  \"telefone\": \"+55 11 99000-0000\",\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/vigilantes", "host": ["{{baseUrl}}"], "path": ["vigilantes"] }
+          }
+        },
+        {
+          "name": "Buscar vigilante",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vigilantes/{{vigilanteId}}", "host": ["{{baseUrl}}"], "path": ["vigilantes","{{vigilanteId}}"] }
+          }
+        },
+        {
+          "name": "Atualizar vigilante",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Carlos Atualizado\",\n  \"telefone\": \"+55 11 99111-2222\",\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/vigilantes/{{vigilanteId}}", "host": ["{{baseUrl}}"], "path": ["vigilantes","{{vigilanteId}}"] }
+          }
+        },
+        {
+          "name": "Desativar vigilante",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vigilantes/{{vigilanteId}}", "host": ["{{baseUrl}}"], "path": ["vigilantes","{{vigilanteId}}"] }
+          }
+        },
+        {
+          "name": "Regenerar agentKey do vigilante",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.agentKey) { pm.collectionVariables.set('agentKeyVig', json.agentKey); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vigilantes/{{vigilanteId}}/agentkey/regenerar", "host": ["{{baseUrl}}"], "path": ["vigilantes","{{vigilanteId}}","agentkey","regenerar"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔄 Ciclos",
+      "item": [
+        {
+          "name": "Buscar config padrão",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/ciclo/padrao", "host": ["{{baseUrl}}"], "path": ["ciclo","padrao"] }
+          }
+        },
+        {
+          "name": "Salvar config padrão",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Ciclo Padrão\",\n  \"duracaoMinutos\": 30,\n  \"toleranciaMinutos\": 5,\n  \"avisoAntesMin\": 5,\n  \"codigoCheckin\": \"1602\",\n  \"codigoPanico\": \"1122\",\n  \"codigoFalha\": \"1130\",\n  \"capturarSnapshot\": true,\n  \"autoReiniciar\": true,\n  \"ativo\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/ciclo/padrao", "host": ["{{baseUrl}}"], "path": ["ciclo","padrao"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📣 Eventos",
+      "item": [
+        {
+          "name": "Listar eventos",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('eventoId', json[0].id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/eventos?page=1&limit=50",
+              "host": ["{{baseUrl}}"], "path": ["eventos"],
+              "query": [
+                { "key": "page",         "value": "1" },
+                { "key": "limit",        "value": "50" },
+                { "key": "tipo",         "value": "",           "disabled": true, "description": "CHECKIN | FALHA | PANICO | PANICO_SILENCIOSO | COACAO" },
+                { "key": "pontoId",      "value": "",           "disabled": true },
+                { "key": "vigilanteId",  "value": "{{vigilanteId}}", "disabled": true },
+                { "key": "dataInicio",   "value": "2026-04-01T00:00:00", "disabled": true },
+                { "key": "dataFim",      "value": "2026-04-30T23:59:59", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stats de eventos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/eventos/stats", "host": ["{{baseUrl}}"], "path": ["eventos","stats"] }
+          }
+        },
+        {
+          "name": "Gravação do evento (±5 min)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/eventos/{{eventoId}}/playback", "host": ["{{baseUrl}}"], "path": ["eventos","{{eventoId}}","playback"] }
+          }
+        },
+        {
+          "name": "Toggle monitoramento",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/eventos/{{eventoId}}/monitorar", "host": ["{{baseUrl}}"], "path": ["eventos","{{eventoId}}","monitorar"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📷 Câmeras",
+      "item": [
+        {
+          "name": "Listar câmeras",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('cameraId', json[0].id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/cameras", "host": ["{{baseUrl}}"], "path": ["cameras"] }
+          }
+        },
+        {
+          "name": "Status online/offline",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/cameras/status", "host": ["{{baseUrl}}"], "path": ["cameras","status"] }
+          }
+        },
+        {
+          "name": "Adicionar câmera",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('cameraId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceSerial\": \"ABC123456\",\n  \"deviceName\": \"Câmera Portaria\",\n  \"channelNo\": 1,\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/cameras", "host": ["{{baseUrl}}"], "path": ["cameras"] }
+          }
+        },
+        {
+          "name": "Obter stream ao vivo (HLS)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}/stream", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}","stream"] }
+          }
+        },
+        {
+          "name": "Capturar snapshot",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}/snapshot", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}","snapshot"] }
+          }
+        },
+        {
+          "name": "Remover câmera",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔔 Notificações",
+      "item": [
+        {
+          "name": "Listar configs de notificação",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/config/notificacoes", "host": ["{{baseUrl}}"], "path": ["config","notificacoes"] }
+          }
+        },
+        {
+          "name": "Salvar config WhatsApp",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"whatsappDestino\": \"+5511999990000\"\n}" },
+            "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp"] }
+          }
+        },
+        {
+          "name": "Salvar config Ctrl Safe",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"ctrlsafeAgentToken\": \"token-do-agente\",\n  \"ctrlsafeInstallId\": \"id-da-instalacao\"\n}" },
+            "url": { "raw": "{{baseUrl}}/config/notificacoes/ctrlsafe", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","ctrlsafe"] }
+          }
+        },
+        {
+          "name": "📱 WhatsApp — Instância",
+          "item": [
+            {
+              "name": "1. Criar instância (nome automático da empresa)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/instancia", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","instancia"] }
+              }
+            },
+            {
+              "name": "2. Conectar (gera QR code)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/conectar", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","conectar"] }
+              }
+            },
+            {
+              "name": "3. Buscar QR code atual",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/qr", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","qr"] }
+              }
+            },
+            {
+              "name": "4. Status da conexão",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/status", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","status"] }
+              }
+            },
+            {
+              "name": "5. Listar grupos",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/grupos", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","grupos"] }
+              }
+            },
+            {
+              "name": "6. Vincular grupo",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"grupoJid\": \"120363xxxxxxxx@g.us\",\n  \"grupoNome\": \"Equipe Segurança\"\n}" },
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/grupo", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","grupo"] }
+              }
+            },
+            {
+              "name": "Remover grupo vinculado",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/grupo", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","grupo"] }
+              }
+            },
+            {
+              "name": "Reconectar (novo QR sem recriar instância)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/reconectar", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","reconectar"] }
+              }
+            },
+            {
+              "name": "Salvar destino + eventos",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ativo\": true,\n  \"whatsappDestino\": \"5511999990000\",\n  \"whatsappEventos\": [\"PANICO\",\"FALHA\",\"ALERTA\",\"COACAO\",\"PANICO_SILENCIOSO\"]\n}" },
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp"] }
+              }
+            },
+            {
+              "name": "Remover instância (desconectar + deletar)",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/config/notificacoes/whatsapp/instancia", "host": ["{{baseUrl}}"], "path": ["config","notificacoes","whatsapp","instancia"] }
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "💳 Plano / Assinatura (Tenant)",
+      "item": [
+        {
+          "name": "Minha assinatura",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/plano", "host": ["{{baseUrl}}"], "path": ["plano"] }
+          }
+        },
+        {
+          "name": "Histórico de cobranças",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/plano/cobrancas", "host": ["{{baseUrl}}"], "path": ["plano","cobrancas"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Superadmin",
+      "item": [
+        {
+          "name": "Overview",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/overview", "host": ["{{baseUrl}}"], "path": ["superadmin","overview"] }
+          }
+        },
+        {
+          "name": "Listar clientes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/superadmin/clientes",
+              "host": ["{{baseUrl}}"], "path": ["superadmin","clientes"],
+              "query": [
+                { "key": "status",  "value": "ativo", "disabled": true },
+                { "key": "planoId", "value": "",       "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar cliente",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('clienteId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Nova Empresa Ltda\",\n  \"email\": \"empresa@exemplo.com.br\",\n  \"cnpj\": \"12.345.678/0001-99\",\n  \"telefone\": \"+55 11 3000-0000\",\n  \"adminNome\": \"Admin da Empresa\",\n  \"adminEmail\": \"admin@empresa.com.br\",\n  \"adminSenha\": \"Admin@2024!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes"] }
+          }
+        },
+        {
+          "name": "Buscar cliente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}"] }
+          }
+        },
+        {
+          "name": "Atualizar cliente",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Nome Atualizado\",\n  \"ativo\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}"] }
+          }
+        },
+        {
+          "name": "Criar assinatura para cliente",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"planoId\": \"{{planoId}}\",\n  \"periodicidade\": \"MENSAL\",\n  \"billingType\": \"BOLETO\",\n  \"trialDias\": 14\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/assinatura", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","assinatura"] }
+          }
+        },
+        {
+          "name": "Upgrade de plano",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"planoId\": \"plano-profissional\"\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/assinatura/upgrade", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","assinatura","upgrade"] }
+          }
+        },
+        {
+          "name": "Cancelar assinatura",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/assinatura", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","assinatura"] }
+          }
+        },
+        {
+          "name": "Listar planos",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/planos", "host": ["{{baseUrl}}"], "path": ["superadmin","planos"] }
+          }
+        },
+        {
+          "name": "Criar plano",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('planoId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Enterprise\",\n  \"descricao\": \"Para grandes operações\",\n  \"valorMensal\": 999.90,\n  \"valorAnual\": 9999.00,\n  \"pontosIncluidos\": 50,\n  \"limiteCameras\": 100,\n  \"limiteUsuarios\": 50\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/planos", "host": ["{{baseUrl}}"], "path": ["superadmin","planos"] }
+          }
+        },
+        {
+          "name": "Atualizar plano",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"valorMensal\": 1099.90,\n  \"ativo\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/planos/{{planoId}}", "host": ["{{baseUrl}}"], "path": ["superadmin","planos","{{planoId}}"] }
+          }
+        },
+        {
+          "name": "Histórico de cobranças do cliente",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/assinatura/cobrancas", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","assinatura","cobrancas"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📱 Field API  (x-agent-key)",
+      "description": "Endpoints usados pelo app/dispositivo de campo.\n\nAutenticação: header x-agent-key (não JWT).\n- Sempre use {{agentKeyPonto}} no header x-agent-key\n- Sempre inclua vigilanteId no body para identificar o vigilante\n\nFluxo recomendado:\n1. Execute 'Config completa' para popular agentKeyPonto e vigilanteId automaticamente\n2. Use esses valores em todas as requisições subsequentes",
+      "item": [
+        {
+          "name": "Config completa (inicialização)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.agentKeyPonto) { pm.collectionVariables.set('agentKeyPonto', json.agentKeyPonto); }",
+            "if (json.vigilanteId)   { pm.collectionVariables.set('vigilanteId',   json.vigilanteId); }",
+            "pm.test('Config OK', () => pm.response.to.have.status(200));"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/config", "host": ["{{baseUrl}}"], "path": ["api","field","v1","config"] }
+          }
+        },
+        {
+          "name": "Config ciclo (polling leve)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.vigilanteId) { pm.collectionVariables.set('vigilanteId', json.vigilanteId); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/config/ciclo", "host": ["{{baseUrl}}"], "path": ["api","field","v1","config","ciclo"] }
+          }
+        },
+        {
+          "name": "Status do ciclo atual",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/status", "host": ["{{baseUrl}}"], "path": ["api","field","v1","status"] }
+          }
+        },
+        {
+          "name": "Check-in",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vigilanteId\": \"{{vigilanteId}}\",\n  \"observacao\": \"Ronda concluída sem ocorrências\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/checkin", "host": ["{{baseUrl}}"], "path": ["api","field","v1","checkin"] }
+          }
+        },
+        {
+          "name": "Pânico",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"PANICO\",\n  \"vigilanteId\": \"{{vigilanteId}}\",\n  \"observacao\": \"Invasão detectada\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] }
+          }
+        },
+        {
+          "name": "Pânico Silencioso",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"PANICO_SILENCIOSO\",\n  \"vigilanteId\": \"{{vigilanteId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] }
+          }
+        },
+        {
+          "name": "Coação",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"COACAO\",\n  \"vigilanteId\": \"{{vigilanteId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] }
+          }
+        },
+        {
+          "name": "Falha de dispositivo",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vigilanteId\": \"{{vigilanteId}}\",\n  \"observacao\": \"Falha de energia no dispositivo\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/falha", "host": ["{{baseUrl}}"], "path": ["api","field","v1","falha"] }
+          }
+        },
+        {
+          "name": "Iniciar ciclo manual",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/ciclo/iniciar", "host": ["{{baseUrl}}"], "path": ["api","field","v1","ciclo","iniciar"] }
+          }
+        },
+        {
+          "name": "Parar ciclo",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/ciclo/parar", "host": ["{{baseUrl}}"], "path": ["api","field","v1","ciclo","parar"] }
+          }
+        },
+        {
+          "name": "Config por vigilante ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyVig}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/vigilante/{{vigilanteId}}/config", "host": ["{{baseUrl}}"], "path": ["api","field","v1","vigilante","{{vigilanteId}}","config"] }
+          }
+        },
+        {
+          "name": "Config por ponto ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/ponto/{{pontoId}}/config", "host": ["{{baseUrl}}"], "path": ["api","field","v1","ponto","{{pontoId}}","config"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔗 Webhooks",
+      "item": [
+        {
+          "name": "Webhook Asaas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "asaas-access-token", "value": "<ASAAS_WEBHOOK_TOKEN>" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"event\": \"PAYMENT_CONFIRMED\",\n  \"payment\": {\n    \"id\": \"pay_123\",\n    \"status\": \"CONFIRMED\",\n    \"value\": 199.90,\n    \"externalReference\": \"ext-tenant-seguranca-total\"\n  }\n}" },
+            "url": { "raw": "{{baseUrl}}/webhooks/asaas", "host": ["{{baseUrl}}"], "path": ["webhooks","asaas"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "❤️ Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    }
+
+  ]
+}

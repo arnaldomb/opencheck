@@ -1,0 +1,20 @@
+FROM node:20-alpine
+RUN apk add --no-cache openssl
+RUN corepack enable && corepack prepare pnpm@9.14.0 --activate
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/api/package.json              ./apps/api/
+COPY apps/web/package.json              ./apps/web/
+COPY packages/database/package.json    ./packages/database/
+COPY packages/shared/package.json      ./packages/shared/
+COPY packages/ui/package.json          ./packages/ui/
+COPY packages/asaas-sdk/package.json   ./packages/asaas-sdk/
+COPY packages/ezviz-sdk/package.json   ./packages/ezviz-sdk/
+COPY packages/ctrlsafe-sdk/package.json ./packages/ctrlsafe-sdk/
+RUN pnpm install --frozen-lockfile
+
+COPY packages/database/prisma ./packages/database/prisma
+COPY packages/database/src    ./packages/database/src
+
+CMD ["sh", "-c", "pnpm --filter @alerta-vigia/database exec prisma db push --accept-data-loss && pnpm --filter @alerta-vigia/database db:seed"]

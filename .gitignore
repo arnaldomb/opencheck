@@ -1,0 +1,31 @@
+node_modules
+.turbo
+dist
+.next
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+
+# Prisma
+packages/database/generated/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+*.override.yml
+
+# Chaves e tokens locais
+deploy_key
+.mcp.json

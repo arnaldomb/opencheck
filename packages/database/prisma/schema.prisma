@@ -1,0 +1,423 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────
+// SUPERADMIN
+// ─────────────────────────────────────
+
+model Superadmin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  senha     String
+  nome      String
+  criadoEm DateTime @default(now())
+}
+
+// ─────────────────────────────────────
+// PLANOS
+// ─────────────────────────────────────
+
+model Plano {
+  id              String   @id @default(cuid())
+  nome            String
+  descricao       String?
+  pontosIncluidos Int
+  valorMensal     Decimal  @db.Decimal(10, 2)
+  valorAnual      Decimal? @db.Decimal(10, 2)
+  limiteCameras   Int      @default(5)
+  limiteUsuarios  Int      @default(10)
+  ativo           Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+
+  assinaturas Assinatura[]
+}
+
+// ─────────────────────────────────────
+// TENANTS (EMPRESAS CLIENTES)
+// ─────────────────────────────────────
+
+model Tenant {
+  id           String   @id @default(cuid())
+  nome         String
+  cnpj         String?  @unique
+  email        String   @unique
+  telefone     String?
+  ativo        Boolean  @default(true)
+  onboardingOk Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+
+  usuarios     Usuario[]
+  pontos       Ponto[]
+  cameras      Camera[]
+  vigilantes   Vigilante[]
+  assinatura   Assinatura?
+  eventos      Evento[]
+  ciclos       ConfigCiclo[]
+  notifConfigs ConfigNotificacao[]
+  onboarding   OnboardingStep?
+}
+
+model Usuario {
+  id         String   @id @default(cuid())
+  tenantId   String
+  email      String   @unique
+  nome       String
+  papel      Papel    @default(OPERADOR)
+  senha      String
+  ativo      Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────
+// ASSINATURA ASAAS
+// ─────────────────────────────────────
+
+model Assinatura {
+  id             String           @id @default(cuid())
+  tenantId       String           @unique
+  planoId        String
+  periodicidade  Periodicidade    @default(MENSAL)
+  status         AssinaturaStatus @default(TRIAL)
+
+  asaasCustomerId     String? @unique
+  asaasSubscriptionId String? @unique
+  externalReference   String  @unique @default(cuid())
+
+  pontosContratados   Int
+  proximaCobrancaEm   DateTime?
+  trialAteEm          DateTime?
+  canceladaEm         DateTime?
+  criadoEm           DateTime    @default(now())
+  atualizadoEm       DateTime    @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  plano     Plano      @relation(fields: [planoId], references: [id])
+  cobrancas Cobranca[]
+}
+
+model Cobranca {
+  id             String        @id @default(cuid())
+  assinaturaId   String
+  asaasPaymentId String        @unique
+  asaasEventId   String?       @unique
+  valor          Decimal       @db.Decimal(10, 2)
+  status         CobrancaStatus
+  billingType    String
+  vencimentoEm   DateTime
+  paguEm         DateTime?
+  criadoEm      DateTime      @default(now())
+
+  assinatura Assinatura @relation(fields: [assinaturaId], references: [id])
+}
+
+// ─────────────────────────────────────
+// PONTOS (PORTARIAS)
+// ─────────────────────────────────────
+
+model Ponto {
+  id         String   @id @default(cuid())
+  tenantId   String
+  nome       String
+  descricao  String?
+  endereco   String?
+  ativo      Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  canalAlerta CanalAlerta?
+
+  ctrlsafeAccount    String?
+  ctrlsafePartition  String?
+  ctrlsafeZone       String?
+  ctrlsafeReceiver   String?
+  ctrlsafeLine       String?
+  ctrlsafeLicenseKey String?
+  ctrlsafeAgentToken String?
+  ctrlsafeInstallId  String?
+
+  agentKey   String?  @unique
+  agentKeyAt DateTime?
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vigilantes  Vigilante[]    @relation("VigilantePontos")
+  cameras     Camera[]
+  eventos     Evento[]
+  configCiclo ConfigCiclo?
+  execucoes   ExecucaoCiclo[]
+}
+
+// ─────────────────────────────────────
+// VIGILANTES
+// ─────────────────────────────────────
+
+model Vigilante {
+  id         String   @id @default(cuid())
+  tenantId   String
+  nome       String
+  telefone   String?
+  rfid       String?
+  codigo     String?
+  ativo      Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  agentKey   String?  @unique
+  agentKeyAt DateTime?
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pontos Ponto[] @relation("VigilantePontos")
+
+  @@unique([tenantId, codigo])
+}
+
+// ─────────────────────────────────────
+// CÂMERAS EZVIZ
+// ─────────────────────────────────────
+
+model Camera {
+  id           String   @id @default(cuid())
+  tenantId     String
+  pontoId      String?
+  deviceSerial String
+  deviceName   String?
+  channelNo    Int      @default(1)
+  ativa        Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto     Ponto?     @relation(fields: [pontoId], references: [id])
+  snapshots Snapshot[]
+}
+
+model Snapshot {
+  id         String   @id @default(cuid())
+  cameraId   String
+  eventoId   String?
+  imageUrl   String
+  criadoEm DateTime @default(now())
+
+  camera Camera @relation(fields: [cameraId], references: [id])
+}
+
+// ─────────────────────────────────────
+// CICLOS DE ALERTA
+// ─────────────────────────────────────
+
+model ConfigCiclo {
+  id                String   @id @default(cuid())
+  tenantId          String
+  pontoId           String?  @unique
+  nome              String   @default("Padrão")
+
+  duracaoMinutos    Int      @default(10)
+  toleranciaMinutos Int      @default(2)
+  avisoAntesMin     Int      @default(5)
+
+  codigoCheckin     String   @default("1602")
+  codigoPanico      String   @default("1122")
+  codigoFalha       String   @default("1130")
+
+  capturarSnapshot  Boolean  @default(true)
+  enviarAvisoWpp    Boolean  @default(true)
+  autoReiniciar     Boolean  @default(true)
+  ativo             Boolean  @default(true)
+
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto     Ponto?        @relation(fields: [pontoId], references: [id])
+  execucoes ExecucaoCiclo[]
+  agendas   AgendaCiclo[]
+}
+
+model ExecucaoCiclo {
+  id           String      @id @default(cuid())
+  configId     String
+  pontoId      String
+  iniciadoEm   DateTime    @default(now())
+  expiraEm     DateTime
+  finalizadoEm DateTime?
+  status       CicloStatus @default(EM_ANDAMENTO)
+  checkinEm    DateTime?
+  alertaEm     DateTime?
+  snapshotId   String?
+
+  avisoJobId  String?
+  expiraJobId String?
+
+  config ConfigCiclo @relation(fields: [configId], references: [id])
+  ponto  Ponto       @relation(fields: [pontoId], references: [id])
+}
+
+// ─────────────────────────────────────
+// AGENDAS (horários de operação por turno)
+// ─────────────────────────────────────
+
+model AgendaCiclo {
+  id         String   @id @default(cuid())
+  configId   String
+  // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+  diasSemana Int[]
+  horaInicio String   // "08:00"
+  horaFim    String   // "18:00"
+  ativo      Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  config ConfigCiclo @relation(fields: [configId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────
+// AGENT KEY LOG (auditoria de acesso de campo)
+// ─────────────────────────────────────
+
+model AgentKeyLog {
+  id           String       @id @default(cuid())
+  tipo         AgentKeyTipo
+  referenciaId String
+  tenantId     String
+  acao         String
+  ip           String?
+  userAgent    String?
+  criadoEm    DateTime     @default(now())
+}
+
+// ─────────────────────────────────────
+// EVENTOS
+// ─────────────────────────────────────
+
+model Evento {
+  id          String      @id @default(cuid())
+  tenantId    String
+  pontoId     String?
+  tipo        TipoEvento
+  canal       CanalAlerta?
+  encaminhado Boolean     @default(false)
+  monitorado  Boolean     @default(false)
+  snapshotId  String?
+  ocorridoEm  DateTime    @default(now())
+  criadoEm   DateTime    @default(now())
+  meta        Json?
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto  Ponto?  @relation(fields: [pontoId], references: [id])
+}
+
+// ─────────────────────────────────────
+// NOTIFICAÇÕES
+// ─────────────────────────────────────
+
+model ConfigNotificacao {
+  id       String          @id @default(cuid())
+  tenantId String
+  tipo     TipoNotificacao
+  ativo    Boolean         @default(true)
+
+  whatsappDestino        String?
+  whatsappEventos        String[] // TipoEvento[] que disparam WhatsApp; vazio = todos
+  whatsappGrupoJid       String?  // JID do grupo WhatsApp para envio de alertas
+  whatsappGrupoNome      String?  // Nome do grupo (cache para exibição)
+  whatsappInstStatus     String?  @default("DESCONECTADO") // DESCONECTADO | AGUARDANDO_QR | CONECTADO
+  evolutionUrl           String?
+  evolutionApiKey        String?
+  evolutionInstance      String?
+  evolutionInstanceToken String?
+
+  ctrlsafeLicenseKey String?
+  ctrlsafeAgentToken String?
+  ctrlsafeInstallId  String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, tipo])
+}
+
+// ─────────────────────────────────────
+// ONBOARDING
+// ─────────────────────────────────────
+
+model OnboardingStep {
+  id          String    @id @default(cuid())
+  tenantId    String    @unique
+  ponto       Boolean   @default(false)
+  vigilante   Boolean   @default(false)
+  ciclo       Boolean   @default(false)
+  notificacao Boolean   @default(false)
+  teste       Boolean   @default(false)
+  concluidoEm DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────
+
+enum Papel {
+  SUPERADMIN
+  ADMIN
+  OPERADOR
+  VIGILANTE
+}
+
+enum Periodicidade {
+  MENSAL
+  ANUAL
+}
+
+enum AssinaturaStatus {
+  TRIAL
+  ATIVA
+  INADIMPLENTE
+  SUSPENSA
+  CANCELADA
+}
+
+enum CobrancaStatus {
+  PENDENTE
+  CONFIRMADA
+  RECEBIDA
+  VENCIDA
+  CANCELADA
+  ESTORNADA
+}
+
+enum CicloStatus {
+  EM_ANDAMENTO
+  CONCLUIDO
+  ALERTA
+  FALHA
+  CANCELADO
+}
+
+enum CanalAlerta {
+  WHATSAPP
+  CTRLSAFE
+}
+
+enum TipoNotificacao {
+  WHATSAPP
+  CTRLSAFE
+}
+
+enum TipoEvento {
+  CHECKIN
+  PANICO
+  PANICO_SILENCIOSO
+  COACAO
+  FALHA
+  AVISO
+  RESTAURACAO
+  TESTE
+}
+
+enum AgentKeyTipo {
+  PONTO
+  VIGILANTE
+}

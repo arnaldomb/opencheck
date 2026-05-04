@@ -1,0 +1,36 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        sslRedirect: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          X-Robots-Tag: "noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex"
+          server: ""
+
+    compress:
+      compress: {}
+
+    cors-api:
+      headers:
+        accessControlAllowOriginList:
+          - "https://alertavigia.com.br"
+          - "https://www.alertavigia.com.br"
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+        accessControlMaxAge: 100
+        addVaryHeader: true
