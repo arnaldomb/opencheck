@@ -89,7 +89,7 @@ export async function createInstance(
     const body = await res.text().catch(() => '')
     throw new Error(`EvoGo create instance ${res.status}: ${body}`)
   }
-  return res.json()
+  return res.json() as Promise<{ instanceId?: string; name?: string }>
 }
 
 export async function connectInstance(
@@ -105,7 +105,7 @@ export async function connectInstance(
     const body = await res.text().catch(() => '')
     throw new Error(`EvoGo connect ${res.status}: ${body}`)
   }
-  return res.json()
+  return res.json() as Promise<{ qrCode?: string; qrURL?: string; [key: string]: unknown }>
 }
 
 export async function getInstanceQR(
@@ -120,7 +120,7 @@ export async function getInstanceQR(
     const body = await res.text().catch(() => '')
     throw new Error(`EvoGo QR ${res.status}: ${body}`)
   }
-  return res.json()
+  return res.json() as Promise<{ qrCode?: string; qrURL?: string; [key: string]: unknown }>
 }
 
 export async function getInstanceStatus(
@@ -135,7 +135,7 @@ export async function getInstanceStatus(
     const body = await res.text().catch(() => '')
     throw new Error(`EvoGo status ${res.status}: ${body}`)
   }
-  return res.json()
+  return res.json() as Promise<{ state: string; [key: string]: unknown }>
 }
 
 export async function listGroups(
@@ -150,8 +150,8 @@ export async function listGroups(
     const body = await res.text().catch(() => '')
     throw new Error(`EvoGo grupos ${res.status}: ${body}`)
   }
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.groups ?? data.data ?? [])
+  const data = await res.json() as Record<string, unknown> | EvoGoGrupo[]
+  return Array.isArray(data) ? data : ((data.groups ?? data.data ?? []) as EvoGoGrupo[])
 }
 
 export async function logoutInstance(
