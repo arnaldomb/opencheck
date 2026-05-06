@@ -39,6 +39,7 @@ export function notificacaoWorker(): void {
           whatsappEventos:    true,
           evolutionUrl:       true,
           evolutionApiKey:    true,
+          evolutionInstanceToken: true,
           evolutionInstance:  true,
           whatsappInstStatus: true,
         },
@@ -65,14 +66,14 @@ export function notificacaoWorker(): void {
     // ── WhatsApp ──────────────────────────────────────────────────────────────
     const wppEventos    = wppCfg?.whatsappEventos ?? []
     const deveEnviar    = wppEventos.length === 0 || wppEventos.includes(tipo)
-    const temInstancia  = wppCfg?.evolutionInstance && wppCfg?.evolutionUrl && wppCfg?.evolutionApiKey
+    const temInstancia  = wppCfg?.evolutionInstance && wppCfg?.evolutionUrl && (wppCfg?.evolutionInstanceToken || wppCfg?.evolutionApiKey)
     const estaConectado = wppCfg?.whatsappInstStatus === 'CONECTADO'
     const temDestino    = !!(wppCfg?.whatsappDestino || wppCfg?.whatsappGrupoJid)
 
     if (temInstancia && estaConectado && deveEnviar && temDestino) {
       const evoConfig = {
         url:      wppCfg!.evolutionUrl!,
-        apiKey:   wppCfg!.evolutionApiKey!,
+        apiKey:   wppCfg!.evolutionInstanceToken ?? wppCfg!.evolutionApiKey!,
         instance: wppCfg!.evolutionInstance!,
       }
 

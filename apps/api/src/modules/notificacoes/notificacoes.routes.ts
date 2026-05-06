@@ -10,6 +10,7 @@ import {
   getInstanceQR,
   getInstanceStatus,
   listGroups,
+  listInstances,
   logoutInstance,
   deleteInstance,
 } from '../../infra/evogo/evogo.service.js'
@@ -34,6 +35,44 @@ async function getWppCfg(tenantId: string) {
 function serverFromCfg(cfg: { evolutionUrl: string | null; evolutionApiKey: string | null }) {
   if (!cfg.evolutionUrl || !cfg.evolutionApiKey) return null
   return { url: cfg.evolutionUrl, apiKey: cfg.evolutionApiKey }
+}
+
+function instanceServersFromCfg(cfg: {
+  evolutionUrl: string | null
+  evolutionApiKey: string | null
+  evolutionInstanceToken: string | null
+}) {
+  if (!cfg.evolutionUrl) return []
+  const list = [
+    cfg.evolutionApiKey ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionApiKey } : null,
+    cfg.evolutionInstanceToken ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionInstanceToken } : null,
+  ].filter(Boolean) as Array<{ url: string; apiKey: string }>
+
+  const seen = new Set<string>()
+  return list.filter(s => {
+    const key = `${s.url}|${s.apiKey}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+async function tryWithServers<T>(
+  servers: Array<{ url: string; apiKey: string }>,
+  fn: (server: { url: string; apiKey: string }) => Promise<T>,
+) {
+  let lastErr: unknown = null
+  for (const server of servers) {
+    try {
+      return await fn(server)
+    } catch (err) {
+      const msg = String(err)
+      const authErr = msg.includes('401') || msg.includes('403') || msg.includes('not authorized')
+      if (!authErr) throw err
+      lastErr = err
+    }
+  }
+  throw lastErr ?? new Error('Falha ao autenticar no servidor WhatsApp.')
 }
 
 // ─── rotas ───────────────────────────────────────────────────────────────────
@@ -100,10 +139,30 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       }
     }
 
-    const instanceName = buildInstanceName(tenant.nome)
-    const token        = randomUUID()
+    const instanceName = buildInstanceName(tenant.nome, tenantId)
+    let token: string = randomUUID()
 
-    await createInstance(server, instanceName, token)
+    try {
+      await createInstance(server, instanceName, token)
+    } catch (err) {
+      const msg = String(err)
+      if (!msg.includes('already exists')) throw err
+
+      await logoutInstance(server, instanceName).catch(() => {})
+      await deleteInstance(server, instanceName).catch(() => {})
+
+      token = randomUUID()
+      try {
+        await createInstance(server, instanceName, token)
+      } catch (err2) {
+        const msg2 = String(err2)
+        if (!msg2.includes('already exists')) throw err2
+        const all = await listInstances(server)
+        const existing = all.find(i => i.name === instanceName)
+        if (!existing) throw err2
+        token = existing.token
+      }
+    }
 
     await prisma.configNotificacao.upsert({
       where:  { tenantId_tipo: { tenantId, tipo: 'WHATSAPP' } },
@@ -139,10 +198,10 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Instância não criada. Chame POST /whatsapp/instancia primeiro.' })
     }
 
-    const server = serverFromCfg(cfg)
-    if (!server) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
+    const servers = instanceServersFromCfg(cfg)
+    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
 
-    const qrData = await connectInstance(server, cfg.evolutionInstance)
+    const qrData = await tryWithServers(servers, s => connectInstance(s, cfg.evolutionInstance!))
 
     await prisma.configNotificacao.updateMany({
       where: { tenantId, tipo: 'WHATSAPP' },
@@ -161,11 +220,10 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Instância não configurada.' })
     }
 
-    const server = serverFromCfg(cfg)
-    if (!server) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
+    const servers = instanceServersFromCfg(cfg)
+    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
 
-    const qrData = await getInstanceQR(server, cfg.evolutionInstance)
-    return qrData
+    return tryWithServers(servers, s => getInstanceQR(s, cfg.evolutionInstance!))
   })
 
   // ── GET /whatsapp/status — status da conexão ──────────────────────────────
@@ -177,12 +235,12 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return { status: 'SEM_INSTANCIA' }
     }
 
-    const server = serverFromCfg(cfg)
-    if (!server) return { status: cfg.whatsappInstStatus ?? 'DESCONECTADO' }
+    const servers = instanceServersFromCfg(cfg)
+    if (servers.length === 0) return { status: cfg.whatsappInstStatus ?? 'DESCONECTADO' }
 
     try {
-      const statusData = await getInstanceStatus(server, cfg.evolutionInstance)
-      const conectado  = statusData.state === 'open' || statusData.state === 'connected'
+      const statusData = await tryWithServers(servers, s => getInstanceStatus(s, cfg.evolutionInstance!))
+      const conectado  = statusData.connected ?? (statusData.state === 'open' || statusData.state === 'connected')
       const novoStatus = conectado ? 'CONECTADO' : (cfg.whatsappInstStatus ?? 'DESCONECTADO')
 
       if (conectado && cfg.whatsappInstStatus !== 'CONECTADO') {
@@ -198,7 +256,16 @@ export async function notificacoesRoutes(app: FastifyInstance) {
         grupoJid:     cfg.whatsappGrupoJid ?? null,
         grupoNome:    cfg.whatsappGrupoNome ?? null,
       }
-    } catch {
+    } catch (err) {
+      // 401/404 = instância não existe mais no EvoGo → atualiza DB
+      const msg = String(err)
+      if (msg.includes('401') || msg.includes('404') || msg.includes('not authorized')) {
+        await prisma.configNotificacao.updateMany({
+          where: { tenantId, tipo: 'WHATSAPP' },
+          data:  { whatsappInstStatus: 'DESCONECTADO' },
+        }).catch(() => {})
+        return { status: 'DESCONECTADO', grupoJid: cfg.whatsappGrupoJid ?? null, grupoNome: cfg.whatsappGrupoNome ?? null }
+      }
       return {
         status:    cfg.whatsappInstStatus ?? 'DESCONECTADO',
         grupoJid:  cfg.whatsappGrupoJid  ?? null,
@@ -219,11 +286,19 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'WhatsApp não está conectado. Conecte primeiro.' })
     }
 
-    const server = serverFromCfg(cfg)
-    if (!server) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
+    const servers = instanceServersFromCfg(cfg)
+    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
 
-    const grupos = await listGroups(server, cfg.evolutionInstance)
-    return grupos
+    try {
+      return await tryWithServers(servers, s => listGroups(s, cfg.evolutionInstance!))
+    } catch (err) {
+      const msg = String(err)
+      const rateLimited = msg.includes('rate-overlimit') || msg.includes('429')
+      if (rateLimited) {
+        return reply.status(429).send({ error: 'Servidor WhatsApp limitou as consultas. Aguarde alguns segundos e tente novamente.' })
+      }
+      throw err
+    }
   })
 
   // ── PUT /whatsapp/grupo — vincular grupo para notificações ────────────────
@@ -258,14 +333,14 @@ export async function notificacoesRoutes(app: FastifyInstance) {
     const { tenantId } = request.user as { tenantId: string }
 
     const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return reply.status(400).send({ error: 'Instância não encontrada.' })
-    }
 
-    const server = serverFromCfg(cfg)
-    if (server) {
-      await logoutInstance(server, cfg.evolutionInstance).catch(() => {})
-      await deleteInstance(server, cfg.evolutionInstance).catch(() => {})
+    // Tenta limpar no EvoGo mesmo que a instância não exista (erros ignorados)
+    if (cfg?.evolutionInstance) {
+      const server = serverFromCfg(cfg)
+      if (server) {
+        await logoutInstance(server, cfg.evolutionInstance).catch(() => {})
+        await deleteInstance(server, cfg.evolutionInstance).catch(() => {})
+      }
     }
 
     await prisma.configNotificacao.updateMany({
@@ -292,10 +367,10 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Instância não criada.' })
     }
 
-    const server = serverFromCfg(cfg)
-    if (!server) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
+    const servers = instanceServersFromCfg(cfg)
+    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
 
-    const qrData = await connectInstance(server, cfg.evolutionInstance)
+    const qrData = await tryWithServers(servers, s => connectInstance(s, cfg.evolutionInstance!))
 
     await prisma.configNotificacao.updateMany({
       where: { tenantId, tipo: 'WHATSAPP' },

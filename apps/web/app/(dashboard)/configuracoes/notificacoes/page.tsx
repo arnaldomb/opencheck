@@ -140,9 +140,12 @@ export default function NotificacoesPage() {
           setQrCode(null)
           if (res.grupoJid) { setGrupoJid(res.grupoJid); setGrupoNome(res.grupoNome ?? '') }
           carregarGrupos()
+        } else if (res.status === 'AGUARDANDO_QR') {
+          // Atualiza QR a cada ciclo caso ainda não tenha chegado
+          buscarQR()
         }
       } catch { /* ignora erros de polling */ }
-    }, 3000)
+    }, 5000)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pararPolling() {
@@ -178,8 +181,25 @@ export default function NotificacoesPage() {
         '/config/notificacoes/whatsapp/conectar',
         { method: 'POST' },
       )
+      const qr = res.qrCode ?? res.qrURL ?? null
       setInstStatus('AGUARDANDO_QR')
-      setQrCode(res.qrCode ?? res.qrURL ?? null)
+      setQrCode(qr)
+
+      if (!qr) {
+        // EvoGo pode ter restaurado sessão sem QR — verifica status imediatamente
+        try {
+          const statusRes = await apiFetch<WppStatus>('/config/notificacoes/whatsapp/status')
+          setInstStatus(statusRes.status)
+          if (statusRes.status === 'CONECTADO') {
+            if (statusRes.grupoJid) { setGrupoJid(statusRes.grupoJid); setGrupoNome(statusRes.grupoNome ?? '') }
+            carregarGrupos()
+            return
+          }
+          // Ainda não conectado — tenta buscar QR separadamente
+          buscarQR()
+        } catch { /* ignora */ }
+      }
+
       iniciarPolling()
     } catch (err) {
       setErro(String(err))
@@ -196,8 +216,23 @@ export default function NotificacoesPage() {
         '/config/notificacoes/whatsapp/reconectar',
         { method: 'POST' },
       )
+      const qr = res.qrCode ?? res.qrURL ?? null
       setInstStatus('AGUARDANDO_QR')
-      setQrCode(res.qrCode ?? res.qrURL ?? null)
+      setQrCode(qr)
+
+      if (!qr) {
+        try {
+          const statusRes = await apiFetch<WppStatus>('/config/notificacoes/whatsapp/status')
+          setInstStatus(statusRes.status)
+          if (statusRes.status === 'CONECTADO') {
+            if (statusRes.grupoJid) { setGrupoJid(statusRes.grupoJid); setGrupoNome(statusRes.grupoNome ?? '') }
+            carregarGrupos()
+            return
+          }
+          buscarQR()
+        } catch { /* ignora */ }
+      }
+
       iniciarPolling()
     } catch (err) {
       setErro(String(err))
@@ -227,14 +262,23 @@ export default function NotificacoesPage() {
   }
 
   // ── grupos ───────────────────────────────────────────────────────────────────
-  async function carregarGrupos() {
+  async function carregarGrupos(tentativas = 3) {
     setLoadingGrupos(true)
     try {
-      const lista = await apiFetch<Grupo[]>('/config/notificacoes/whatsapp/grupos')
-      setGrupos(lista)
-    } catch { /* WhatsApp pode ainda estar sincronizando */ }
-    finally { setLoadingGrupos(false) }
+      for (let i = 0; i < tentativas; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 3000))
+        const lista = await apiFetch<Grupo[]>('/config/notificacoes/whatsapp/grupos')
+        if (!Array.isArray(lista)) continue
+        if (lista.length > 0 || i === tentativas - 1) { setGrupos(lista); return }
+      }
+    } catch (err) {
+      setErro(String(err))
+    } finally {
+      setLoadingGrupos(false)
+    }
   }
+
+  function recarregarGrupos() { carregarGrupos() }
 
   async function salvarGrupo() {
     if (!grupoJid) return
@@ -399,7 +443,7 @@ export default function NotificacoesPage() {
                 <label className="label flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" /> Grupo para alertas
                 </label>
-                <button type="button" onClick={carregarGrupos} disabled={loadingGrupos}
+                <button type="button" onClick={recarregarGrupos} disabled={loadingGrupos}
                   className="text-xs text-ggtech-blue hover:underline flex items-center gap-1">
                   {loadingGrupos ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   Recarregar lista
@@ -450,10 +494,14 @@ export default function NotificacoesPage() {
               </div>
             </div>
 
-            <div className="border-t border-gray-100 pt-4">
+            <div className="border-t border-gray-100 pt-4 flex items-center gap-4">
               <button type="button" onClick={reconectar} disabled={conectando}
                 className="btn-ghost flex items-center gap-1.5 text-sm text-gray-500 py-1">
                 <RefreshCw className="h-3.5 w-3.5" /> Reconectar
+              </button>
+              <button type="button" onClick={removerInstancia} disabled={removendo}
+                className="btn-ghost flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 py-1">
+                <Trash2 className="h-3.5 w-3.5" /> Remover instância
               </button>
             </div>
           </div>

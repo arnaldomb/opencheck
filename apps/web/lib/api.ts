@@ -40,7 +40,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error ?? 'Erro desconhecido')
+    const message = err.error ?? 'Erro desconhecido'
+    const details = err.details != null ? `: ${String(err.details)}` : ''
+    throw new Error(`${message}${details}`)
   }
 
   return res.json() as Promise<T>
