@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/login', async (request, reply) => {

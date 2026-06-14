@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import type { AsaasWebhookPayload } from '@alerta-vigia/asaas-sdk'
+import type { AsaasWebhookPayload } from '@opencheck/asaas-sdk'
 import { WEBHOOK_HANDLERS } from '../assinaturas/webhook.handler.js'
 import { webhookQueue } from '../../infra/redis/queues.js'
 

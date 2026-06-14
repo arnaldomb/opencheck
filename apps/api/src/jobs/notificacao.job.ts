@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
 import { sendWhatsAppText, sendWhatsAppMedia } from '../infra/evogo/evogo.service.js'
 import { sendCtrlSafeEvent, CTRLSAFE_EVENT_TYPE } from '../infra/ctrlsafe/ctrlsafe.service.js'

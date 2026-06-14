@@ -3,7 +3,7 @@ import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import jwt from '@fastify/jwt'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 
 import { authRoutes } from './modules/auth/auth.routes.js'
 import { superadminRoutes } from './modules/superadmin/superadmin.routes.js'
@@ -15,7 +15,7 @@ import { configuracoesRoutes } from './modules/configuracoes/configuracoes.route
 import { camerasRoutes } from './modules/cameras/cameras.routes.js'
 import { eventosRoutes } from './modules/eventos/eventos.routes.js'
 import { webhookRoutes } from './modules/webhooks/webhook.routes.js'
-import { vigilantesRoutes } from './modules/vigilantes/vigilantes.routes.js'
+import { operadoresRoutes } from './modules/operadores/operadores.routes.js'
 import { fieldApiRoutes } from './modules/field-api/field-api.routes.js'
 import { relatoriosRoutes } from './modules/relatorios/relatorios.routes.js'
 import { initSocket } from './infra/socket/socket.js'
@@ -63,7 +63,7 @@ await app.register(notificacoesRoutes, { prefix: '/config/notificacoes' })
 await app.register(configuracoesRoutes, { prefix: '/configuracoes' })
 await app.register(camerasRoutes, { prefix: '/cameras' })
 await app.register(eventosRoutes, { prefix: '/eventos' })
-await app.register(vigilantesRoutes, { prefix: '/vigilantes' })
+await app.register(operadoresRoutes, { prefix: '/operadores' })
 await app.register(fieldApiRoutes, { prefix: '/api/field/v1' })
 await app.register(relatoriosRoutes, { prefix: '/relatorios' })
 

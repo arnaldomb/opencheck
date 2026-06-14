@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { verificarLimitePontos } from '../../middleware/assinatura.middleware.js'
 import { generateAgentKey } from '../field-api/field-api.utils.js'
@@ -205,25 +205,25 @@ export async function pontosRoutes(app: FastifyInstance) {
     return { success: true }
   })
 
-  // ── Vigilantes (vincular / desvincular) ─────────────────────────────────────
+  // ── Operadores (vincular / desvincular) ─────────────────────────────────────
 
-  app.post('/:id/vigilantes/:vigilanteId', async (request, reply) => {
+  app.post('/:id/operadores/:operadorId', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-    const { id, vigilanteId } = request.params as { id: string; vigilanteId: string }
+    const { id, operadorId } = request.params as { id: string; operadorId: string }
     const ponto = await prisma.ponto.findFirst({ where: { id, tenantId } })
     if (!ponto) return reply.status(404).send({ error: 'Ponto não encontrado' })
-    const vigilante = await prisma.vigilante.findFirst({ where: { id: vigilanteId, tenantId } })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
-    await prisma.ponto.update({ where: { id }, data: { vigilantes: { connect: { id: vigilanteId } } } })
+    const operador = await prisma.operador.findFirst({ where: { id: operadorId, tenantId } })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
+    await prisma.ponto.update({ where: { id }, data: { operadores: { connect: { id: operadorId } } } })
     return { success: true }
   })
 
-  app.delete('/:id/vigilantes/:vigilanteId', async (request, reply) => {
+  app.delete('/:id/operadores/:operadorId', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-    const { id, vigilanteId } = request.params as { id: string; vigilanteId: string }
+    const { id, operadorId } = request.params as { id: string; operadorId: string }
     const ponto = await prisma.ponto.findFirst({ where: { id, tenantId } })
     if (!ponto) return reply.status(404).send({ error: 'Ponto não encontrado' })
-    await prisma.ponto.update({ where: { id }, data: { vigilantes: { disconnect: { id: vigilanteId } } } })
+    await prisma.ponto.update({ where: { id }, data: { operadores: { disconnect: { id: operadorId } } } })
     return { success: true }
   })
 

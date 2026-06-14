@@ -1,7 +1,7 @@
-import { prisma, Assinatura } from '@alerta-vigia/database'
+import { prisma, Assinatura } from '@opencheck/database'
 import { addDays, format } from 'date-fns'
 import { asaasClient } from '../../infra/asaas/asaas.client.js'
-import type { BillingType } from '@alerta-vigia/asaas-sdk'
+import type { BillingType } from '@opencheck/asaas-sdk'
 
 interface CriarAssinaturaOpcoes {
   periodicidade: 'MENSAL' | 'ANUAL'

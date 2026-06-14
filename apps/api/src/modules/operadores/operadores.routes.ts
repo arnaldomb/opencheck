@@ -1,24 +1,24 @@
 import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { generateAgentKey } from '../field-api/field-api.utils.js'
 
 async function gerarCodigoUnico(tenantId: string): Promise<string> {
   for (let i = 0; i < 20; i++) {
     const codigo = String(Math.floor(1000 + Math.random() * 9000))
-    const existe = await prisma.vigilante.findFirst({ where: { tenantId, codigo } })
+    const existe = await prisma.operador.findFirst({ where: { tenantId, codigo } })
     if (!existe) return codigo
   }
-  throw new Error('Não foi possível gerar código único para o vigilante')
+  throw new Error('Não foi possível gerar código único para o operador')
 }
 
-export async function vigilantesRoutes(app: FastifyInstance) {
+export async function operadoresRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
   app.get('/', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
-    const vigs = await prisma.vigilante.findMany({
+    const vigs = await prisma.operador.findMany({
       where: { tenantId, ativo: true },
       select: {
         id: true, tenantId: true,
@@ -40,7 +40,7 @@ export async function vigilantesRoutes(app: FastifyInstance) {
 
     const env = (process.env.AGENT_KEY_ENV ?? 'live') as 'live' | 'test'
     const codigo = await gerarCodigoUnico(tenantId)
-    const vigilante = await prisma.vigilante.create({
+    const operador = await prisma.operador.create({
       data: {
         tenantId,
         nome:      body.nome,
@@ -65,35 +65,35 @@ export async function vigilantesRoutes(app: FastifyInstance) {
       })
     }
 
-    return reply.status(201).send(vigilante)
+    return reply.status(201).send(operador)
   })
 
   app.get('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const vigilante = await prisma.vigilante.findFirst({
+    const operador = await prisma.operador.findFirst({
       where: { id, tenantId },
       include: { pontos: { select: { id: true, nome: true } } },
     })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
-    return vigilante
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
+    return operador
   })
 
   app.put('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
     const body = request.body as { nome?: string; telefone?: string; rfid?: string; ativo?: boolean }
-    const vigilante = await prisma.vigilante.findFirst({ where: { id, tenantId } })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
-    return prisma.vigilante.update({ where: { id }, data: body })
+    const operador = await prisma.operador.findFirst({ where: { id, tenantId } })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
+    return prisma.operador.update({ where: { id }, data: body })
   })
 
   app.delete('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const vigilante = await prisma.vigilante.findFirst({ where: { id, tenantId } })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
-    await prisma.vigilante.update({ where: { id }, data: { ativo: false } })
+    const operador = await prisma.operador.findFirst({ where: { id, tenantId } })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
+    await prisma.operador.update({ where: { id }, data: { ativo: false } })
     return { success: true }
   })
 
@@ -102,10 +102,10 @@ export async function vigilantesRoutes(app: FastifyInstance) {
   app.post('/:id/codigo/gerar', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const vigilante = await prisma.vigilante.findFirst({ where: { id, tenantId } })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
+    const operador = await prisma.operador.findFirst({ where: { id, tenantId } })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
     const codigo = await gerarCodigoUnico(tenantId)
-    const updated = await prisma.vigilante.update({ where: { id }, data: { codigo }, select: { id: true, codigo: true } })
+    const updated = await prisma.operador.update({ where: { id }, data: { codigo }, select: { id: true, codigo: true } })
     return updated
   })
 
@@ -114,11 +114,11 @@ export async function vigilantesRoutes(app: FastifyInstance) {
   app.post('/:id/agentkey/regenerar', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const vigilante = await prisma.vigilante.findFirst({ where: { id, tenantId } })
-    if (!vigilante) return reply.status(404).send({ error: 'Vigilante não encontrado' })
+    const operador = await prisma.operador.findFirst({ where: { id, tenantId } })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
 
     const env = (process.env.AGENT_KEY_ENV ?? 'live') as 'live' | 'test'
-    const updated = await prisma.vigilante.update({
+    const updated = await prisma.operador.update({
       where: { id },
       data: { agentKey: generateAgentKey(env), agentKeyAt: new Date() },
       select: { id: true, agentKey: true, agentKeyAt: true },

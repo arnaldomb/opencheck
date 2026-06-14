@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { cicloAlertaQueue } from '../../infra/redis/queues.js'
 import { getConfigCiclo, getExecucaoAtiva } from '../field-api/field-api.utils.js'

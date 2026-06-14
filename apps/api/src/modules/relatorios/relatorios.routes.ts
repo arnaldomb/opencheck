@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 
 export async function relatoriosRoutes(app: FastifyInstance) {
@@ -49,7 +49,7 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       eventos.map(e => (e.meta as Record<string, string> | null)?.vigilanteId).filter(Boolean)
     )] as string[]
     const vigilantes = vigIds.length
-      ? await prisma.vigilante.findMany({ where: { id: { in: vigIds } }, select: { id: true, nome: true } })
+      ? await prisma.operador.findMany({ where: { id: { in: vigIds } }, select: { id: true, nome: true } })
       : []
     const vigMap = new Map(vigilantes.map(v => [v.id, v.nome]))
 

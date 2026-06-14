@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { FastifyInstance } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import {
   getEvoGoServerConfig,

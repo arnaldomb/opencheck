@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { redisConnection } from '../infra/redis/redis.client.js'
 import { WEBHOOK_HANDLERS } from '../modules/assinaturas/webhook.handler.js'
-import type { AsaasWebhookPayload } from '@alerta-vigia/asaas-sdk'
+import type { AsaasWebhookPayload } from '@opencheck/asaas-sdk'
 
 export async function startJobs(): Promise<void> {
   // Worker de webhooks Asaas
