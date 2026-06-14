@@ -29,5 +29,10 @@ export async function startJobs(): Promise<void> {
   const { notificacaoWorker } = await import('./notificacao.job.js')
   notificacaoWorker()
 
+  // Worker de deadline de abertura + agendamento diário
+  const { aberturaDeadlineWorker, agendarDeadlinesDiarios } = await import('./abertura-deadline.job.js')
+  aberturaDeadlineWorker()
+  await agendarDeadlinesDiarios()
+
   console.log('✅ Jobs iniciados')
 }
