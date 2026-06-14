@@ -50,20 +50,28 @@ export async function registrarCheckin(
   const existing = await prisma.registroAbertura.findUnique({
     where: { pontoId_data: { pontoId, data: hoje } },
   })
-  if (existing?.abertaEm)
-    throw Object.assign(new Error('Abertura já registrada para hoje'), { status: 409 })
+
+  if (existing?.abertaEm) {
+    const deadlineAlterado = existing.deadlineEm.getTime() !== deadline.getTime()
+    if (!deadlineAlterado)
+      throw Object.assign(new Error('Abertura já registrada para hoje'), { status: 409 })
+    // Turno foi atualizado com novo prazo — permite novo check-in
+  }
 
   const data = {
     abertaEm: agora,
     status,
-    turnoId:       turno.id,
-    operadorId:    opts.operadorId ?? null,
+    turnoId:        turno.id,
+    operadorId:     opts.operadorId ?? null,
     nomeComputador: opts.nomeComputador ?? null,
     usuarioWindows: opts.usuarioWindows ?? null,
   }
 
   const registro = existing
-    ? await prisma.registroAbertura.update({ where: { id: existing.id }, data })
+    ? await prisma.registroAbertura.update({
+        where: { id: existing.id },
+        data: { ...data, deadlineEm: deadline },
+      })
     : await prisma.registroAbertura.create({
         data: {
           tenantId, pontoId, configId: config.id,
