@@ -37,7 +37,7 @@ export function aberturaDeadlineWorker(): void {
       if (!config) return
 
       const [h, m] = turno.horaAbertura.split(':').map(Number)
-      const spDate = dataDate.toLocaleDateString('en-CA', { timeZone: TZ })
+      const spDate = dataDate.toISOString().slice(0, 10)
       const deadlineMs = Date.parse(`${spDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`)
         + turno.toleranciaMinutos * 60_000
       const deadline = new Date(deadlineMs)
@@ -75,7 +75,7 @@ export function aberturaDeadlineWorker(): void {
         if (turno.diasSemana.length > 0 && !turno.diasSemana.includes(diaSemana)) continue
 
         const [h, m] = turno.horaAbertura.split(':').map(Number)
-        const spDate = hoje.toLocaleDateString('en-CA', { timeZone: TZ })
+        const spDate = hoje.toISOString().slice(0, 10)
         const deadlineMs = Date.parse(`${spDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`)
           + turno.toleranciaMinutos * 60_000
         const delay = deadlineMs - Date.now()

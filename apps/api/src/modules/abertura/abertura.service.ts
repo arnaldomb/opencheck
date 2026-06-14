@@ -14,12 +14,11 @@ function diaSemanaEmSP(): number {
 }
 
 function calcDeadline(data: Date, horaAbertura: string, toleranciaMinutos: number): Date {
-  // horaAbertura é horário local (BRT = UTC-3). Constrói o timestamp correto em SP.
-  const spDate = data.toLocaleDateString('en-CA', { timeZone: TZ })
+  // data = hojeEmSP() = new Date(spDate + 'T00:00:00.000Z')
+  // toISOString().slice(0,10) extrai o date string SP correto sem conversão de timezone
+  const spDate = data.toISOString().slice(0, 10)
   const [h, m] = horaAbertura.split(':').map(Number)
-  const hh = String(h).padStart(2, '0')
-  const mm = String(m).padStart(2, '0')
-  const ms = Date.parse(`${spDate}T${hh}:${mm}:00-03:00`)
+  const ms = Date.parse(`${spDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`)
   return new Date(ms + toleranciaMinutos * 60_000)
 }
 
