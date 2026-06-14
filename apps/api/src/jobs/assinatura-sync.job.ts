@@ -1,5 +1,5 @@
 import { Queue, Worker } from 'bullmq'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { asaasClient } from '../infra/asaas/asaas.client.js'
 import { redisConnection } from '../infra/redis/redis.client.js'
 

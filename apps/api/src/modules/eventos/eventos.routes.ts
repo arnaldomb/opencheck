@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { getEzvizClient } from '../../infra/ezviz/ezviz.factory.js'
 import { uploadFromUrl } from '../../infra/storage/storage.service.js'
@@ -42,7 +42,7 @@ export async function eventosRoutes(app: FastifyInstance) {
     )] as string[]
 
     const vigilantes = vigIds.length
-      ? await prisma.vigilante.findMany({
+      ? await prisma.operador.findMany({
           where: { id: { in: vigIds } },
           select: { id: true, nome: true },
         })

@@ -1,4 +1,4 @@
-import { AsaasClient } from '@alerta-vigia/asaas-sdk'
+import { AsaasClient } from '@opencheck/asaas-sdk'
 
 export const asaasClient = new AsaasClient({
   apiKey: process.env.ASAAS_API_KEY!,

@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 
 export function generateAgentKey(env: 'live' | 'test' = 'live'): string {
   const random = randomBytes(16).toString('hex')

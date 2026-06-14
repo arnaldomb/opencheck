@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { superadminMiddleware } from '../../middleware/auth.middleware.js'
 import { criarAssinatura, upgradePlano, cancelarAssinatura } from '../assinaturas/assinatura.service.js'
 

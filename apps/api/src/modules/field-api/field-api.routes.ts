@@ -4,7 +4,7 @@ import {
   getConfig, getConfigCicloLeve, getStatus,
   registrarCheckin, dispararPanico, registrarFalha, iniciarCicloManual, pararCiclo,
 } from './field-api.service.js'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 
 export async function fieldApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', agentKeyMiddleware)
@@ -60,24 +60,24 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     return pararCiclo(request.agentCtx)
   })
 
-  // GET /vigilante/:vigilanteId/config — lookup by guard ID
-  app.get('/vigilante/:vigilanteId/config', async (request, reply) => {
-    const { vigilanteId } = request.params as { vigilanteId: string }
+  // GET /operador/:operadorId/config — lookup by operador ID
+  app.get('/operador/:operadorId/config', async (request, reply) => {
+    const { operadorId } = request.params as { operadorId: string }
     const { tenantId } = request.agentCtx
 
-    const vigilante = await prisma.vigilante.findFirst({
-      where: { id: vigilanteId, tenantId, ativo: true },
+    const operador = await prisma.operador.findFirst({
+      where: { id: operadorId, tenantId, ativo: true },
       include: { pontos: { select: { id: true, nome: true, endereco: true, agentKey: true }, take: 1 } },
     })
-    if (!vigilante) return reply.status(404).send({ erro: 'VIGILANTE_NAO_ENCONTRADO', mensagem: 'Vigilante não encontrado neste tenant' })
-    if (!vigilante.pontos[0]) return reply.status(400).send({ erro: 'SEM_PONTO', mensagem: 'Vigilante não vinculado a nenhum ponto' })
+    if (!operador) return reply.status(404).send({ erro: 'OPERADOR_NAO_ENCONTRADO', mensagem: 'Operador não encontrado neste tenant' })
+    if (!operador.pontos[0]) return reply.status(400).send({ erro: 'SEM_PONTO', mensagem: 'Operador não vinculado a nenhum ponto' })
 
-    const ctx = { tenantId, pontoId: vigilante.pontos[0].id, vigilanteId, tipo: 'VIGILANTE' as const }
+    const ctx = { tenantId, pontoId: operador.pontos[0].id, operadorId, tipo: 'OPERADOR' as const }
     const config = await getConfig(ctx)
 
     return {
       ...config,
-      agentKeyPonto: vigilante.pontos[0].agentKey,
+      agentKeyPonto: operador.pontos[0].agentKey,
     }
   })
 
@@ -89,6 +89,6 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId, ativo: true } })
     if (!ponto) return reply.status(404).send({ erro: 'PONTO_NAO_ENCONTRADO', mensagem: 'Ponto não encontrado' })
 
-    return getConfig({ tenantId, pontoId, vigilanteId: null, tipo: 'PONTO' })
+    return getConfig({ tenantId, pontoId, operadorId: null, tipo: 'PONTO' })
   })
 }

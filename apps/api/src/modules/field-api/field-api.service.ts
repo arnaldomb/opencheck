@@ -1,4 +1,4 @@
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { cicloAlertaQueue, notificacaoQueue } from '../../infra/redis/queues.js'
 import { getIO } from '../../infra/socket/socket.js'
 import { getConfigCiclo, getExecucaoAtiva, nowLocal } from './field-api.utils.js'
@@ -33,8 +33,8 @@ async function captureSnapshot(tenantId: string, pontoId: string, eventoId: stri
 async function resolveVigilanteId(tenantId: string, valor: string | undefined): Promise<string | null> {
   if (!valor) return null
   if (/^\d{4}$/.test(valor)) {
-    const vig = await prisma.vigilante.findFirst({ where: { tenantId, codigo: valor, ativo: true } })
-    return vig?.id ?? null
+    const op = await prisma.operador.findFirst({ where: { tenantId, codigo: valor, ativo: true } })
+    return op?.id ?? null
   }
   return valor
 }
@@ -54,7 +54,7 @@ export async function getConfig(ctx: AgentContext) {
     prisma.ponto.findUnique({
       where: { id: ctx.pontoId },
       include: {
-        vigilantes: { where: { ativo: true }, select: { id: true, nome: true, telefone: true, codigo: true } },
+        operadores: { where: { ativo: true }, select: { id: true, nome: true, telefone: true, codigo: true } },
         cameras:    { where: { ativa: true }, select: { id: true, deviceSerial: true, deviceName: true, channelNo: true } },
         tenant:     { select: { id: true, nome: true } },
       },
@@ -66,11 +66,11 @@ export async function getConfig(ctx: AgentContext) {
 
   const cicloConfig = await getConfigCiclo(ctx.pontoId, ctx.tenantId)
 
-  const vigilante = ctx.vigilanteId
-    ? ponto.vigilantes.find(v => v.id === ctx.vigilanteId) ?? ponto.vigilantes[0] ?? null
-    : ponto.vigilantes[0] ?? null
+  const operador = ctx.operadorId
+    ? ponto.operadores.find(v => v.id === ctx.operadorId) ?? ponto.operadores[0] ?? null
+    : ponto.operadores[0] ?? null
 
-  const vigilanteId = vigilante?.codigo ?? vigilante?.id ?? null
+  const vigilanteId = operador?.codigo ?? operador?.id ?? null
 
   return {
     agentKeyPonto: ponto.agentKey,
@@ -82,7 +82,7 @@ export async function getConfig(ctx: AgentContext) {
       endereco:  ponto.endereco,
       ativo:     ponto.ativo,
     },
-    vigilantes: ponto.vigilantes.map(v => ({
+    vigilantes: ponto.operadores.map(v => ({
       id:       v.codigo ?? v.id,
       nome:     v.nome,
       telefone: v.telefone,
@@ -116,7 +116,7 @@ export async function getConfigCicloLeve(ctx: AgentContext) {
 
   return {
     pontoId:           ctx.pontoId,
-    vigilanteId:       ctx.vigilanteId ?? null,
+    vigilanteId:       ctx.operadorId ?? null,
     duracaoMinutos:    cicloConfig?.duracaoMinutos ?? 10,
     toleranciaMinutos: cicloConfig?.toleranciaMinutos ?? 2,
     avisoAntesMinutos: cicloConfig?.avisoAntesMin ?? 5,
@@ -177,7 +177,7 @@ export async function registrarCheckin(ctx: AgentContext, body: { vigilanteId?: 
     return { aceito: false, erro: 'CICLO_INATIVO', mensagem: 'Não há ciclo ativo para este ponto' }
   }
 
-  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.vigilanteId
+  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.operadorId
 
   // Cancel pending BullMQ jobs
   if (execucao.avisoJobId)  await cicloAlertaQueue.remove(execucao.avisoJobId).catch(() => {})
@@ -237,7 +237,7 @@ export async function dispararPanico(ctx: AgentContext, body: {
 }) {
   const tipo = body.tipo ?? 'PANICO_SILENCIOSO'
   const codigoEvento = CODIGOS_EVENTO[tipo] ?? CODIGOS_EVENTO.PANICO
-  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.vigilanteId
+  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.operadorId
 
   const evento = await prisma.evento.create({
     data: {
@@ -283,7 +283,7 @@ export async function dispararPanico(ctx: AgentContext, body: {
 // ── POST /falha ────────────────────────────────────────────────────────────────
 
 export async function registrarFalha(ctx: AgentContext, body: { observacao?: string; vigilanteId?: string }) {
-  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.vigilanteId
+  const vigilanteId = await resolveVigilanteId(ctx.tenantId, body.vigilanteId) ?? ctx.operadorId
   const evento = await prisma.evento.create({
     data: {
       tenantId: ctx.tenantId,

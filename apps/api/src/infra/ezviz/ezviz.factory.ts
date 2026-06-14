@@ -1,4 +1,4 @@
-import { EzvizClient } from '@alerta-vigia/ezviz-sdk'
+import { EzvizClient } from '@opencheck/ezviz-sdk'
 
 export function getEzvizClient(): EzvizClient {
   const appKey    = process.env.EZVIZ_APP_KEY

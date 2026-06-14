@@ -1,5 +1,5 @@
 import { Queue, Worker } from 'bullmq'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
 import { cicloAlertaQueue } from '../infra/redis/queues.js'
 import { dentroDeAgenda, getExecucaoAtiva } from '../modules/field-api/field-api.utils.js'

@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
 import { cicloAlertaQueue } from '../infra/redis/queues.js'
 import { getEzvizClient } from '../infra/ezviz/ezviz.factory.js'

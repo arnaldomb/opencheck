@@ -1,11 +1,11 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 
 export interface AgentContext {
   tenantId: string
   pontoId: string
-  vigilanteId: string | null
-  tipo: 'PONTO' | 'VIGILANTE'
+  operadorId: string | null
+  tipo: 'PONTO' | 'OPERADOR'
 }
 
 declare module 'fastify' {
@@ -40,12 +40,12 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
     }
 
     await logAcesso('PONTO', ponto.id, ponto.tenantId, request)
-    request.agentCtx = { tenantId: ponto.tenantId, pontoId: ponto.id, vigilanteId: null, tipo: 'PONTO' }
+    request.agentCtx = { tenantId: ponto.tenantId, pontoId: ponto.id, operadorId: null, tipo: 'PONTO' }
     return
   }
 
-  // Try as vigilante key
-  const vigilante = await prisma.vigilante.findUnique({
+  // Try as operador key
+  const operador = await prisma.operador.findUnique({
     where: { agentKey },
     include: {
       tenant: { select: { id: true, ativo: true, assinatura: { select: { status: true } } } },
@@ -53,27 +53,27 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
     },
   })
 
-  if (vigilante) {
-    if (!vigilante.ativo) {
-      return reply.status(401).send({ erro: 'VIGILANTE_INATIVO', mensagem: 'Vigilante desativado' })
+  if (operador) {
+    if (!operador.ativo) {
+      return reply.status(401).send({ erro: 'OPERADOR_INATIVO', mensagem: 'Operador desativado' })
     }
-    if (!vigilante.tenant.ativo) {
+    if (!operador.tenant.ativo) {
       return reply.status(401).send({ erro: 'TENANT_INATIVO', mensagem: 'Conta da empresa inativa' })
     }
-    if (!vigilante.pontos[0]) {
-      return reply.status(401).send({ erro: 'SEM_PONTO', mensagem: 'Vigilante não vinculado a nenhum ponto' })
+    if (!operador.pontos[0]) {
+      return reply.status(401).send({ erro: 'SEM_PONTO', mensagem: 'Operador não vinculado a nenhum ponto' })
     }
-    const statusAss = vigilante.tenant.assinatura?.status
+    const statusAss = operador.tenant.assinatura?.status
     if (statusAss === 'CANCELADA' || statusAss === 'SUSPENSA') {
       return reply.status(401).send({ erro: 'ASSINATURA_CANCELADA', mensagem: 'Assinatura cancelada. Contate o administrador.' })
     }
 
-    await logAcesso('VIGILANTE', vigilante.id, vigilante.tenantId, request)
+    await logAcesso('OPERADOR', operador.id, operador.tenantId, request)
     request.agentCtx = {
-      tenantId: vigilante.tenantId,
-      pontoId: vigilante.pontos[0].id,
-      vigilanteId: vigilante.id,
-      tipo: 'VIGILANTE',
+      tenantId: operador.tenantId,
+      pontoId: operador.pontos[0].id,
+      operadorId: operador.id,
+      tipo: 'OPERADOR',
     }
     return
   }
@@ -81,7 +81,7 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
   return reply.status(401).send({ erro: 'AGENT_KEY_INVALIDA', mensagem: 'Chave não encontrada' })
 }
 
-async function logAcesso(tipo: 'PONTO' | 'VIGILANTE', referenciaId: string, tenantId: string, request: FastifyRequest) {
+async function logAcesso(tipo: 'PONTO' | 'OPERADOR', referenciaId: string, tenantId: string, request: FastifyRequest) {
   const acao = `${request.method}:${request.url.split('?')[0]}`
   await prisma.agentKeyLog.create({
     data: {

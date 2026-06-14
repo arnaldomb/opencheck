@@ -1,5 +1,5 @@
-import { prisma, CobrancaStatus } from '@alerta-vigia/database'
-import type { AsaasWebhookPayload, AsaasPayment } from '@alerta-vigia/asaas-sdk'
+import { prisma, CobrancaStatus } from '@opencheck/database'
+import type { AsaasWebhookPayload, AsaasPayment } from '@opencheck/asaas-sdk'
 
 async function idempotente(eventId: string, fn: () => Promise<void>): Promise<void> {
   const jaProcessado = await prisma.cobranca.findUnique({ where: { asaasEventId: eventId } })

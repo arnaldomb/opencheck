@@ -1,4 +1,4 @@
-import { prisma } from '@alerta-vigia/database'
+import { prisma } from '@opencheck/database'
 import { FastifyRequest, FastifyReply } from 'fastify'
 
 export class SemAssinaturaError extends Error { constructor(msg = 'Nenhuma assinatura encontrada') { super(msg); this.name = 'SemAssinaturaError' } }
