@@ -8,6 +8,11 @@ function hojeEmSP(): Date {
   return new Date(spDate + 'T00:00:00.000Z')
 }
 
+function diaSemanaEmSP(): number {
+  const spNow = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }))
+  return spNow.getDay()
+}
+
 function calcDeadline(data: Date, horaAbertura: string, toleranciaMinutos: number): Date {
   const [h, m] = horaAbertura.split(':').map(Number)
   const d = new Date(data)
@@ -20,16 +25,25 @@ export async function registrarCheckin(
   pontoId: string,
   opts: { operadorId?: string; nomeComputador?: string; usuarioWindows?: string },
 ) {
-  const config = await prisma.configAbertura.findUnique({ where: { pontoId } })
+  const config = await prisma.configAbertura.findUnique({
+    where: { pontoId },
+    include: { turnos: { where: { ativo: true } } },
+  })
   if (!config || !config.ativo)
     throw Object.assign(new Error('Ponto sem configuração de abertura ativa'), { status: 400 })
 
-  // Verificar que o ponto pertence ao tenant
   const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId } })
   if (!ponto) throw Object.assign(new Error('Ponto não encontrado'), { status: 404 })
 
+  const diaSemana = diaSemanaEmSP()
+  const turno = config.turnos.find(
+    t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
+  )
+  if (!turno)
+    throw Object.assign(new Error('Sem turno de abertura configurado para hoje'), { status: 400 })
+
   const hoje = hojeEmSP()
-  const deadline = calcDeadline(hoje, config.horaAbertura, config.toleranciaMinutos)
+  const deadline = calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos)
   const agora = new Date()
   const status = agora <= deadline ? ('NO_PRAZO' as const) : ('ATRASADO' as const)
 
@@ -42,7 +56,8 @@ export async function registrarCheckin(
   const data = {
     abertaEm: agora,
     status,
-    operadorId: opts.operadorId ?? null,
+    turnoId:       turno.id,
+    operadorId:    opts.operadorId ?? null,
     nomeComputador: opts.nomeComputador ?? null,
     usuarioWindows: opts.usuarioWindows ?? null,
   }
@@ -57,7 +72,6 @@ export async function registrarCheckin(
         },
       })
 
-  // Cancelar job de deadline se existir
   const jobId = registro.jobId ?? existing?.jobId
   if (jobId) {
     const job = await aberturaQueue.getJob(jobId)
@@ -65,16 +79,37 @@ export async function registrarCheckin(
     await prisma.registroAbertura.update({ where: { id: registro.id }, data: { jobId: null } })
   }
 
+  await prisma.evento.create({
+    data: {
+      tenantId,
+      pontoId,
+      tipo: 'ABERTURA_CHECKIN',
+      meta: {
+        registroAberturaId: registro.id,
+        statusAbertura: status,
+        operadorId: opts.operadorId ?? null,
+        nomeComputador: opts.nomeComputador ?? null,
+        usuarioWindows: opts.usuarioWindows ?? null,
+      },
+    },
+  })
+
   return registro
 }
 
 export async function getStatus(tenantId: string) {
   const hoje = hojeEmSP()
+  const diaSemana = diaSemanaEmSP()
 
   const [pontos, registros] = await Promise.all([
     prisma.ponto.findMany({
       where: { tenantId, ativo: true },
-      select: { id: true, nome: true, configAbertura: true },
+      select: {
+        id: true, nome: true,
+        configAbertura: {
+          include: { turnos: { where: { ativo: true } } },
+        },
+      },
     }),
     prisma.registroAbertura.findMany({ where: { tenantId, data: hoje } }),
   ])
@@ -84,15 +119,19 @@ export async function getStatus(tenantId: string) {
   return pontos.map(p => {
     const reg = regMap.get(p.id)
     const cfg = p.configAbertura
+    const turno = cfg?.turnos.find(
+      t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
+    ) ?? null
+
     return {
       pontoId: p.id,
       nome: p.nome,
-      configurado: !!cfg,
-      horaAbertura: cfg?.horaAbertura ?? null,
-      toleranciaMinutos: cfg?.toleranciaMinutos ?? null,
-      status: reg?.status ?? (cfg ? 'PENDENTE' : 'SEM_CONFIGURACAO'),
+      configurado: !!cfg && !!turno,
+      horaAbertura: turno?.horaAbertura ?? null,
+      toleranciaMinutos: turno?.toleranciaMinutos ?? null,
+      status: reg?.status ?? (turno ? 'PENDENTE' : 'SEM_CONFIGURACAO'),
       abertaEm: reg?.abertaEm ?? null,
-      deadlineEm: reg?.deadlineEm ?? (cfg ? calcDeadline(hoje, cfg.horaAbertura, cfg.toleranciaMinutos) : null),
+      deadlineEm: reg?.deadlineEm ?? (turno ? calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos) : null),
     }
   })
 }
@@ -117,6 +156,7 @@ export async function getHistorico(
       include: {
         ponto:    { select: { nome: true } },
         operador: { select: { nome: true } },
+        turno:    { select: { horaAbertura: true, diasSemana: true } },
       },
       orderBy: { data: 'desc' },
       skip: (opts.page - 1) * opts.limit,

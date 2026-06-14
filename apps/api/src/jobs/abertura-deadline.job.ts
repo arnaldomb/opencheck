@@ -10,12 +10,17 @@ function hojeEmSP(): Date {
   return new Date(spDate + 'T00:00:00.000Z')
 }
 
+function diaSemanaEmSP(): number {
+  const spNow = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }))
+  return spNow.getDay()
+}
+
 export function aberturaDeadlineWorker(): void {
   new Worker('abertura-deadline', async (job) => {
 
     if (job.name === 'deadline') {
-      const { pontoId, tenantId, data } = job.data as {
-        pontoId: string; tenantId: string; data: string
+      const { pontoId, tenantId, turnoId, data } = job.data as {
+        pontoId: string; tenantId: string; turnoId: string; data: string
       }
       const dataDate = new Date(data)
 
@@ -25,13 +30,16 @@ export function aberturaDeadlineWorker(): void {
 
       if (registro?.abertaEm) return // check-in já feito
 
-      const config = await prisma.configAbertura.findUnique({ where: { pontoId } })
+      const turno = await prisma.turnoAbertura.findUnique({ where: { id: turnoId } })
+      if (!turno) return
+
+      const config = await prisma.configAbertura.findUnique({ where: { id: turno.configId } })
       if (!config) return
 
-      const [h, m] = config.horaAbertura.split(':').map(Number)
+      const [h, m] = turno.horaAbertura.split(':').map(Number)
       const deadline = new Date(dataDate)
       deadline.setUTCHours(h, m, 0, 0)
-      deadline.setMinutes(deadline.getMinutes() + config.toleranciaMinutos)
+      deadline.setMinutes(deadline.getMinutes() + turno.toleranciaMinutos)
 
       if (registro) {
         await prisma.registroAbertura.update({
@@ -41,7 +49,7 @@ export function aberturaDeadlineWorker(): void {
       } else {
         await prisma.registroAbertura.create({
           data: {
-            tenantId, pontoId, configId: config.id,
+            tenantId, pontoId, configId: config.id, turnoId,
             data: dataDate, status: 'AUSENTE', deadlineEm: deadline,
           },
         })
@@ -49,35 +57,43 @@ export function aberturaDeadlineWorker(): void {
     }
 
     if (job.name === 'agendar-dia') {
-      // Roda diariamente: agenda um job de deadline por ponto com config ativa
-      const configs = await prisma.configAbertura.findMany({
-        where: { ativo: true },
-        include: { ponto: { select: { tenantId: true } } },
+      // Agenda um job de deadline por turno ativo que opere hoje
+      const turnos = await prisma.turnoAbertura.findMany({
+        where: { ativo: true, config: { ativo: true } },
+        include: {
+          config: {
+            select: { id: true, pontoId: true, ponto: { select: { tenantId: true } } },
+          },
+        },
       })
 
       const hoje = hojeEmSP()
-      const hojeDiaSemana = new Date().getDay()
+      const diaSemana = diaSemanaEmSP()
 
-      for (const config of configs) {
-        if (config.diasSemana.length > 0 && !config.diasSemana.includes(hojeDiaSemana)) continue
+      for (const turno of turnos) {
+        if (turno.diasSemana.length > 0 && !turno.diasSemana.includes(diaSemana)) continue
 
-        const [h, m] = config.horaAbertura.split(':').map(Number)
+        const [h, m] = turno.horaAbertura.split(':').map(Number)
         const deadline = new Date(hoje)
         deadline.setUTCHours(h, m, 0, 0)
-        const deadlineMs = deadline.getTime() + config.toleranciaMinutos * 60_000
+        const deadlineMs = deadline.getTime() + turno.toleranciaMinutos * 60_000
         const delay = deadlineMs - Date.now()
 
         if (delay <= 0) continue
 
         const j = await aberturaQueue.add(
           'deadline',
-          { pontoId: config.pontoId, tenantId: config.ponto.tenantId, data: hoje.toISOString() },
+          {
+            pontoId: turno.config.pontoId,
+            tenantId: turno.config.ponto.tenantId,
+            turnoId: turno.id,
+            data: hoje.toISOString(),
+          },
           { delay, removeOnComplete: true, removeOnFail: false },
         )
 
-        // Persistir jobId para poder cancelar no check-in
         const existing = await prisma.registroAbertura.findUnique({
-          where: { pontoId_data: { pontoId: config.pontoId, data: hoje } },
+          where: { pontoId_data: { pontoId: turno.config.pontoId, data: hoje } },
         })
         if (existing) {
           await prisma.registroAbertura.update({ where: { id: existing.id }, data: { jobId: j.id } })
@@ -89,7 +105,6 @@ export function aberturaDeadlineWorker(): void {
 }
 
 export async function agendarDeadlinesDiarios(): Promise<void> {
-  // Roda todo dia às 00:00 BRT (03:00 UTC)
   await aberturaQueue.add(
     'agendar-dia',
     {},

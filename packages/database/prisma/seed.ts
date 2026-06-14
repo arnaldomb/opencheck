@@ -14,8 +14,7 @@ function horasAtras(n: number) {
   const d = new Date(); d.setHours(d.getHours() - n); return d
 }
 function agentKey(suffix: string): string {
-  // Deterministic keys for seed — easy to use in tests/docs
-  return `av_test_${suffix.padEnd(32, '0')}`
+  return `oc_tst_${suffix.slice(0, 8).toUpperCase()}`
 }
 
 async function main() {
@@ -388,7 +387,7 @@ async function main() {
   for (const p of pontosSemKey) {
     await prisma.ponto.update({
       where: { id: p.id },
-      data: { agentKey: `av_test_${randomBytes(16).toString('hex')}`, agentKeyAt: new Date() },
+      data: { agentKey: `oc_tst_${randomBytes(6).toString('base64url').toUpperCase()}`, agentKeyAt: new Date() },
     })
   }
   if (pontosSemKey.length) console.log(`  ✅ agentKey gerada para ${pontosSemKey.length} ponto(s) sem chave`)
@@ -397,7 +396,7 @@ async function main() {
   for (const v of opsSemKey) {
     await prisma.operador.update({
       where: { id: v.id },
-      data: { agentKey: `av_test_${randomBytes(16).toString('hex')}`, agentKeyAt: new Date() },
+      data: { agentKey: `oc_tst_${randomBytes(6).toString('base64url').toUpperCase()}`, agentKeyAt: new Date() },
     })
   }
   if (opsSemKey.length) console.log(`  ✅ agentKey gerada para ${opsSemKey.length} operador(es) sem chave`)

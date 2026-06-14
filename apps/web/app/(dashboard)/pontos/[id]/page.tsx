@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import {
   MapPin, ArrowLeft, Save, Trash2, Loader2, Shield, Camera,
-  Key, Copy, RefreshCw, Plus, Clock, Check, Timer, CheckCircle2, X,
+  Key, Copy, RefreshCw, Plus, Check, CheckCircle2, X, AlarmClock, Bell,
 } from 'lucide-react'
 
 interface Ponto {
@@ -17,45 +17,35 @@ interface Ponto {
 }
 interface Operador { id: string; nome: string; ativo: boolean; pontos?: { id: string; nome: string }[]; codigo?: string }
 interface Cam { id: string; deviceName?: string; deviceSerial: string; ativa: boolean; pontoId?: string }
-interface Agenda {
-  id: string; diasSemana: number[]; horaInicio: string; horaFim: string; ativo: boolean
+interface TurnoAbertura {
+  id?: string; diasSemana: number[]; horaAbertura: string; toleranciaMinutos: number
 }
-interface ConfigCiclo {
-  id: string; duracaoMinutos: number; toleranciaMinutos: number; avisoAntesMin: number
-  codigoCheckin: string; codigoPanico: string; codigoFalha: string
-  capturarSnapshot: boolean; autoReiniciar: boolean; ativo: boolean
+interface ConfigAberturaData {
+  id?: string; emailAlerta?: string; ativo: boolean; turnos: TurnoAbertura[]
 }
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-function AgendaForm({ pontoId, onSaved }: { pontoId: string; onSaved: () => void }) {
+function TurnoForm({ onAdd }: { onAdd: (t: TurnoAbertura) => void }) {
   const [diasSemana, setDias] = useState<number[]>([1, 2, 3, 4, 5])
-  const [horaInicio, setInicio] = useState('08:00')
-  const [horaFim, setFim] = useState('18:00')
-  const [saving, setSaving] = useState(false)
+  const [horaAbertura, setHora] = useState('08:00')
+  const [toleranciaMinutos, setTolerancia] = useState(30)
   const [erro, setErro] = useState('')
 
   function toggleDia(d: number) {
     setDias(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort())
   }
 
-  async function handleSave() {
+  function handleAdd() {
     if (!diasSemana.length) { setErro('Selecione ao menos um dia.'); return }
-    setSaving(true); setErro('')
-    try {
-      await apiFetch(`/pontos/${pontoId}/agendas`, {
-        method: 'POST',
-        body: JSON.stringify({ diasSemana, horaInicio, horaFim }),
-      })
-      onSaved()
-    } catch (e) {
-      setErro(String(e))
-    } finally { setSaving(false) }
+    if (!horaAbertura) { setErro('Informe o horário de abertura.'); return }
+    onAdd({ diasSemana, horaAbertura, toleranciaMinutos })
+    setErro('')
   }
 
   return (
     <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-      <p className="text-sm font-medium text-gray-700">Novo turno</p>
+      <p className="text-sm font-medium text-gray-700">Novo turno de abertura</p>
       <div className="flex flex-wrap gap-1.5">
         {DIAS.map((d, i) => (
           <button key={i} type="button" onClick={() => toggleDia(i)}
@@ -68,17 +58,16 @@ function AgendaForm({ pontoId, onSaved }: { pontoId: string; onSaved: () => void
       </div>
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <label className="label">Início</label>
-          <input type="time" className="input" value={horaInicio} onChange={e => setInicio(e.target.value)} />
+          <label className="label">Hora de abertura</label>
+          <input type="time" className="input" value={horaAbertura} onChange={e => setHora(e.target.value)} />
         </div>
-        <div className="flex-1">
-          <label className="label">Fim</label>
-          <input type="time" className="input" value={horaFim} onChange={e => setFim(e.target.value)} />
+        <div className="w-36">
+          <label className="label">Tolerância (min)</label>
+          <input type="number" min={0} className="input" value={toleranciaMinutos} onChange={e => setTolerancia(Number(e.target.value))} />
         </div>
-        <button type="button" onClick={handleSave} disabled={saving}
+        <button type="button" onClick={handleAdd}
           className="btn-primary flex items-center gap-1.5 h-10 flex-shrink-0">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          Salvar turno
+          <Check className="h-3.5 w-3.5" /> Adicionar
         </button>
       </div>
       {erro && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
@@ -93,38 +82,34 @@ export default function PontoDetailPage() {
   const [ponto, setPonto]           = useState<Ponto | null>(null)
   const [operadores, setOperadores] = useState<Operador[]>([])
   const [cameras, setCameras]       = useState<Cam[]>([])
-  const [agendas, setAgendas]       = useState<Agenda[]>([])
-  const [ciclo, setCiclo]           = useState<ConfigCiclo | null>(null)
   const [loading, setLoading]       = useState(true)
   const [ctrlEnabled, setCtrlEnabled] = useState(false)
 
-  const [saving, setSaving]           = useState(false)
-  const [savingCiclo, setSavingCiclo] = useState(false)
-  const [savingCtrl, setSavingCtrl]   = useState(false)
-  const [activating, setActivating]   = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [savingCtrl, setSavingCtrl] = useState(false)
+  const [activating, setActivating] = useState(false)
 
   const [ctrlOk, setCtrlOk]         = useState(false)
   const [activateOk, setActivateOk] = useState(false)
   const [regenerating, setRegen]    = useState(false)
   const [copied, setCopied]         = useState(false)
-  const [showAgendaForm, setShowAgendaForm] = useState(false)
+  const [showTurnoForm, setShowTurnoForm]   = useState(false)
   const [vinculandoId, setVinculandoId]     = useState<string | null>(null)
   const [selectedVig, setSelectedVig]       = useState('')
+  const [aberturaConfig, setAberturaConfig] = useState<ConfigAberturaData>({ ativo: true, turnos: [] })
+  const [savingAbertura, setSavingAbertura] = useState(false)
+  const [erroAbertura, setErroAbertura]     = useState('')
+  const [aberturaOk, setAberturaOk]         = useState(false)
 
-  const [erro, setErro]           = useState('')
-  const [erroCiclo, setErroCiclo] = useState('')
-  const [erroCtrl, setErroCtrl]   = useState('')
-  const [actErro, setActErro]     = useState('')
+  const [erro, setErro]         = useState('')
+  const [erroCtrl, setErroCtrl] = useState('')
+  const [actErro, setActErro]   = useState('')
 
   const [form, setForm] = useState({ nome: '', descricao: '', endereco: '' })
-  const [cicloForm, setCicloForm] = useState({
-    duracaoMinutos: 30, toleranciaMinutos: 5, avisoAntesMin: 5,
-    codigoCheckin: '1602', codigoPanico: '1122', codigoFalha: '1130',
-    capturarSnapshot: true, autoReiniciar: true,
-  })
   const [ctrlForm, setCtrlForm] = useState({
     ctrlsafeAccount: '', ctrlsafePartition: '01',
     ctrlsafeZone: '099', ctrlsafeReceiver: '001', ctrlsafeLine: '01',
+    codigoCheckin: '1602', codigoPanico: '1122', codigoFalha: '1130',
   })
   const [licenseKey, setLicenseKey] = useState('')
 
@@ -132,45 +117,30 @@ export default function PontoDetailPage() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
-  const loadAgendas = useCallback(async () => {
-    const data = await apiFetch<Agenda[]>(`/pontos/${id}/agendas`).catch(() => [] as Agenda[])
-    setAgendas(data as Agenda[])
-  }, [id])
-
   useEffect(() => {
     Promise.all([
       apiFetch<Ponto>(`/pontos/${id}`),
       apiFetch<Operador[]>('/operadores').catch(() => []),
       apiFetch<Cam[]>('/cameras').catch(() => []),
-      apiFetch<Agenda[]>(`/pontos/${id}/agendas`).catch(() => []),
-      apiFetch<ConfigCiclo>(`/pontos/${id}/ciclo`).catch(() => null),
       apiFetch<{ alertarPorCtrlSafe: boolean }>('/configuracoes/notificacoes').catch(() => ({ alertarPorCtrlSafe: false })),
-    ]).then(([pt, vigs, cams, ags, cic, notif]) => {
+      apiFetch<ConfigAberturaData>(`/abertura/config/${id}`).catch(() => null),
+    ]).then(([pt, vigs, cams, notif, abertura]) => {
       const p = pt as Ponto
       setPonto(p)
       setForm({ nome: p.nome, descricao: p.descricao ?? '', endereco: p.endereco ?? '' })
-      setCtrlForm({
+      setCtrlForm(f => ({
+        ...f,
         ctrlsafeAccount:   p.ctrlsafeAccount   ?? '',
         ctrlsafePartition: p.ctrlsafePartition  ?? '01',
         ctrlsafeZone:      p.ctrlsafeZone       ?? '099',
         ctrlsafeReceiver:  p.ctrlsafeReceiver   ?? '001',
         ctrlsafeLine:      p.ctrlsafeLine       ?? '01',
-      })
+      }))
       setLicenseKey(p.ctrlsafeLicenseKey ?? '')
       setCtrlEnabled((notif as { alertarPorCtrlSafe: boolean }).alertarPorCtrlSafe)
       setOperadores((vigs as Operador[]).filter(v => v.ativo))
       setCameras((cams as Cam[]).filter(c => c.ativa && c.pontoId === id))
-      setAgendas(ags as Agenda[])
-      const c = cic as ConfigCiclo | null
-      if (c) {
-        setCiclo(c)
-        setCicloForm({
-          duracaoMinutos: c.duracaoMinutos, toleranciaMinutos: c.toleranciaMinutos,
-          avisoAntesMin: c.avisoAntesMin, codigoCheckin: c.codigoCheckin,
-          codigoPanico: c.codigoPanico, codigoFalha: c.codigoFalha,
-          capturarSnapshot: c.capturarSnapshot, autoReiniciar: c.autoReiniciar,
-        })
-      }
+      if (abertura) setAberturaConfig(abertura as ConfigAberturaData)
       setLoading(false)
     }).catch(() => { setLoading(false); setErro('Ponto não encontrado') })
   }, [id])
@@ -207,23 +177,28 @@ export default function PontoDetailPage() {
     } finally { setRegen(false) }
   }
 
-  function setCF(field: string, value: string | number | boolean) {
-    setCicloForm(f => ({ ...f, [field]: value }))
-  }
-
-  async function handleSaveCiclo(e: React.FormEvent) {
+  async function handleSaveAbertura(e: React.FormEvent) {
     e.preventDefault()
-    setSavingCiclo(true); setErroCiclo('')
+    setSavingAbertura(true); setErroAbertura(''); setAberturaOk(false)
     try {
-      const res = await apiFetch<ConfigCiclo>(`/pontos/${id}/ciclo`, { method: 'PUT', body: JSON.stringify(cicloForm) })
-      setCiclo(res as ConfigCiclo)
-    } catch (err) { setErroCiclo(String(err)) }
-    finally { setSavingCiclo(false) }
+      const res = await apiFetch<ConfigAberturaData>(`/abertura/config/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(aberturaConfig),
+      })
+      setAberturaConfig(res as ConfigAberturaData)
+      setShowTurnoForm(false)
+      setAberturaOk(true); setTimeout(() => setAberturaOk(false), 4000)
+    } catch (err) { setErroAbertura(String(err)) }
+    finally { setSavingAbertura(false) }
   }
 
-  async function handleRemoveAgenda(agendaId: string) {
-    await apiFetch(`/pontos/${id}/agendas/${agendaId}`, { method: 'DELETE' })
-    loadAgendas()
+  function handleAddTurno(t: TurnoAbertura) {
+    setAberturaConfig(c => ({ ...c, turnos: [...c.turnos, t] }))
+    setShowTurnoForm(false)
+  }
+
+  function handleRemoveTurno(idx: number) {
+    setAberturaConfig(c => ({ ...c, turnos: c.turnos.filter((_, i) => i !== idx) }))
   }
 
   async function handleVincularOperador() {
@@ -265,11 +240,17 @@ export default function PontoDetailPage() {
     setSavingCtrl(true); setErroCtrl(''); setCtrlOk(false)
     try {
       await Promise.all([
-        apiFetch(`/pontos/${id}`, { method: 'PUT', body: JSON.stringify(ctrlForm) }),
+        apiFetch(`/pontos/${id}`, { method: 'PUT', body: JSON.stringify({
+          ctrlsafeAccount:   ctrlForm.ctrlsafeAccount,
+          ctrlsafePartition: ctrlForm.ctrlsafePartition,
+          ctrlsafeZone:      ctrlForm.ctrlsafeZone,
+          ctrlsafeReceiver:  ctrlForm.ctrlsafeReceiver,
+          ctrlsafeLine:      ctrlForm.ctrlsafeLine,
+        }) }),
         apiFetch(`/pontos/${id}/ciclo`, { method: 'PUT', body: JSON.stringify({
-          codigoCheckin: cicloForm.codigoCheckin,
-          codigoPanico:  cicloForm.codigoPanico,
-          codigoFalha:   cicloForm.codigoFalha,
+          codigoCheckin: ctrlForm.codigoCheckin,
+          codigoPanico:  ctrlForm.codigoPanico,
+          codigoFalha:   ctrlForm.codigoFalha,
         }) }),
       ])
       setCtrlOk(true); setTimeout(() => setCtrlOk(false), 4000)
@@ -341,7 +322,7 @@ export default function PontoDetailPage() {
         <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Key className="h-5 w-5 text-ggtech-blue" /> Chave de campo (agentKey)
         </h2>
-        <p className="text-xs text-gray-500 mb-3">Use esta chave no app mobile ou software desktop para autenticar as requisições de campo.</p>
+        <p className="text-xs text-gray-500 mb-3">Use esta chave no app desktop para autenticar as requisições de check-in de abertura.</p>
         {ponto.agentKey ? (
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-700 truncate">
@@ -366,97 +347,81 @@ export default function PontoDetailPage() {
         )}
       </div>
 
-      {/* Configuração de ciclo */}
-      <div className="card">
-        <h2 className="font-heading font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <Timer className="h-5 w-5 text-ggtech-blue" /> Configuração de ciclo
-        </h2>
-        {!ciclo && (
-          <p className="text-xs text-gray-400 mb-4">Nenhuma configuração específica — usando padrão do tenant. Salve abaixo para criar uma configuração exclusiva para este ponto.</p>
-        )}
-        <form onSubmit={handleSaveCiclo} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="label">Duração (min) *</label>
-              <input type="number" min={1} className="input" value={cicloForm.duracaoMinutos}
-                onChange={e => setCF('duracaoMinutos', Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="label">Tolerância (min)</label>
-              <input type="number" min={0} className="input" value={cicloForm.toleranciaMinutos}
-                onChange={e => setCF('toleranciaMinutos', Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="label">Aviso antes (min)</label>
-              <input type="number" min={0} className="input" value={cicloForm.avisoAntesMin}
-                onChange={e => setCF('avisoAntesMin', Number(e.target.value))} />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-6 pt-1">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" className="h-4 w-4 rounded accent-ggtech-blue"
-                checked={cicloForm.capturarSnapshot}
-                onChange={e => setCF('capturarSnapshot', e.target.checked)} />
-              <span className="text-sm text-gray-700">Capturar snapshot no checkin</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" className="h-4 w-4 rounded accent-ggtech-blue"
-                checked={cicloForm.autoReiniciar}
-                onChange={e => setCF('autoReiniciar', e.target.checked)} />
-              <span className="text-sm text-gray-700">Reiniciar ciclo automaticamente</span>
-            </label>
-          </div>
-          {erroCiclo && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroCiclo}</div>}
-          <div className="flex justify-end">
-            <button type="submit" disabled={savingCiclo} className="btn-primary flex items-center gap-2">
-              {savingCiclo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {savingCiclo ? 'Salvando...' : 'Salvar ciclo'}
+      {/* Controle de Abertura */}
+      <form onSubmit={handleSaveAbertura} className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading font-semibold text-gray-800 flex items-center gap-2">
+            <AlarmClock className="h-5 w-5 text-ggtech-blue" /> Controle de Abertura
+          </h2>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" className="h-4 w-4 rounded accent-ggtech-blue"
+              checked={aberturaConfig.ativo}
+              onChange={e => setAberturaConfig(c => ({ ...c, ativo: e.target.checked }))} />
+            <span className="text-sm text-gray-700">Ativo</span>
+          </label>
+        </div>
+
+        <div>
+          <label className="label flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> E-mail de alerta (opcional)</label>
+          <input type="email" className="input" placeholder="alertas@empresa.com.br"
+            value={aberturaConfig.emailAlerta ?? ''}
+            onChange={e => setAberturaConfig(c => ({ ...c, emailAlerta: e.target.value || undefined }))} />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-700">Turnos de abertura</p>
+            <button type="button" onClick={() => setShowTurnoForm(v => !v)}
+              className="btn-ghost flex items-center gap-1 text-xs">
+              <Plus className="h-3.5 w-3.5" /> Adicionar turno
             </button>
           </div>
-        </form>
-      </div>
 
-      {/* Horários de operação */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading font-semibold text-gray-800 flex items-center gap-2">
-            <Clock className="h-5 w-5 text-ggtech-blue" /> Horários de operação
-          </h2>
-          <button type="button" onClick={() => setShowAgendaForm(v => !v)}
-            className="btn-ghost flex items-center gap-1.5 text-sm">
-            <Plus className="h-4 w-4" /> Adicionar turno
+          {showTurnoForm && <TurnoForm onAdd={handleAddTurno} />}
+
+          {aberturaConfig.turnos.length === 0 && !showTurnoForm ? (
+            <p className="text-sm text-gray-400">Nenhum turno configurado.</p>
+          ) : (
+            <div className="space-y-2">
+              {aberturaConfig.turnos.map((t, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex gap-1">
+                      {DIAS.map((d, i) => (
+                        <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                          (t.diasSemana.length === 0 || t.diasSemana.includes(i))
+                            ? 'bg-ggtech-blue/10 text-ggtech-blue'
+                            : 'text-gray-300'
+                        }`}>{d}</span>
+                      ))}
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">
+                      {t.horaAbertura} <span className="text-gray-400 font-normal">· tolerância {t.toleranciaMinutos} min</span>
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => handleRemoveTurno(idx)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {erroAbertura && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroAbertura}</div>}
+        {aberturaOk && (
+          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-700 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" /> Configuração de abertura salva!
+          </div>
+        )}
+        <div className="flex justify-end">
+          <button type="submit" disabled={savingAbertura} className="btn-primary flex items-center gap-2">
+            {savingAbertura ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {savingAbertura ? 'Salvando...' : 'Salvar abertura'}
           </button>
         </div>
-        {showAgendaForm && (
-          <div className="mb-4">
-            <AgendaForm pontoId={id} onSaved={() => { setShowAgendaForm(false); loadAgendas() }} />
-          </div>
-        )}
-        {agendas.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhum turno configurado — sistema opera sem restrição de horário.</p>
-        ) : (
-          <div className="space-y-2">
-            {agendas.map(a => (
-              <div key={a.id} className={`flex items-center justify-between p-3 rounded-lg border ${a.ativo ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex gap-1">
-                    {DIAS.map((d, i) => (
-                      <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                        a.diasSemana.includes(i) ? 'bg-ggtech-blue/10 text-ggtech-blue' : 'text-gray-300'
-                      }`}>{d}</span>
-                    ))}
-                  </div>
-                  <span className="text-sm font-medium text-gray-700">{a.horaInicio} – {a.horaFim}</span>
-                </div>
-                <button onClick={() => handleRemoveAgenda(a.id)}
-                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Remover turno">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </form>
 
       {/* CTRL+SAFE — só aparece quando habilitado globalmente */}
       {ctrlEnabled && (
@@ -469,7 +434,6 @@ export default function PontoDetailPage() {
               : <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Não ativado</span>}
           </div>
 
-          {/* Ativação de licença */}
           <div className="space-y-3">
             <label className="label flex items-center gap-1.5"><Key className="h-3.5 w-3.5" /> Chave de licença</label>
             <div className="flex gap-2">
@@ -502,7 +466,6 @@ export default function PontoDetailPage() {
             )}
           </div>
 
-          {/* Contact ID */}
           <form onSubmit={handleSaveCtrl} className="space-y-4 pt-2 border-t border-gray-100">
             <p className="text-xs font-medium text-gray-600">Contact ID — identificadores na central de monitoramento</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -535,18 +498,18 @@ export default function PontoDetailPage() {
             <div className="grid grid-cols-3 gap-4 pt-2 border-t border-gray-100">
               <div>
                 <label className="label">Cód. Check-in</label>
-                <input className="input font-mono" value={cicloForm.codigoCheckin}
-                  onChange={e => setCF('codigoCheckin', e.target.value)} />
+                <input className="input font-mono" value={ctrlForm.codigoCheckin}
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoCheckin: e.target.value }))} />
               </div>
               <div>
                 <label className="label">Cód. Pânico</label>
-                <input className="input font-mono" value={cicloForm.codigoPanico}
-                  onChange={e => setCF('codigoPanico', e.target.value)} />
+                <input className="input font-mono" value={ctrlForm.codigoPanico}
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoPanico: e.target.value }))} />
               </div>
               <div>
                 <label className="label">Cód. Falha</label>
-                <input className="input font-mono" value={cicloForm.codigoFalha}
-                  onChange={e => setCF('codigoFalha', e.target.value)} />
+                <input className="input font-mono" value={ctrlForm.codigoFalha}
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoFalha: e.target.value }))} />
               </div>
             </div>
             {erroCtrl && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroCtrl}</div>}
@@ -570,8 +533,6 @@ export default function PontoDetailPage() {
         <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <Shield className="h-5 w-5 text-ggtech-blue" /> Operadores vinculados
         </h2>
-
-        {/* Vinculados */}
         {(() => {
           const vinculados = operadores.filter(v => v.pontos?.some(p => p.id === id))
           const disponiveis = operadores.filter(v => !v.pontos?.some(p => p.id === id))
@@ -598,8 +559,6 @@ export default function PontoDetailPage() {
                   ))}
                 </div>
               )}
-
-              {/* Vincular novo */}
               {disponiveis.length > 0 && (
                 <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
                   <select className="input flex-1 text-sm" value={selectedVig} onChange={e => setSelectedVig(e.target.value)}>

@@ -26,21 +26,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@alerta-vigia/asaas-sdk':
-        specifier: workspace:*
-        version: link:../../packages/asaas-sdk
-      '@alerta-vigia/ctrlsafe-sdk':
-        specifier: workspace:*
-        version: link:../../packages/ctrlsafe-sdk
-      '@alerta-vigia/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@alerta-vigia/ezviz-sdk':
-        specifier: workspace:*
-        version: link:../../packages/ezviz-sdk
-      '@alerta-vigia/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@aws-sdk/client-s3':
         specifier: ^3.0.0
         version: 3.1037.0
@@ -62,6 +47,21 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^4.0.1
         version: 4.2.0
+      '@opencheck/asaas-sdk':
+        specifier: workspace:*
+        version: link:../../packages/asaas-sdk
+      '@opencheck/ctrlsafe-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ctrlsafe-sdk
+      '@opencheck/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@opencheck/ezviz-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ezviz-sdk
+      '@opencheck/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -114,7 +114,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@alerta-vigia/shared':
+      '@opencheck/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       hls.js:

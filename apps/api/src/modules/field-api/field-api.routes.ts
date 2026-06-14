@@ -4,6 +4,7 @@ import {
   getConfig, getConfigCicloLeve, getStatus,
   registrarCheckin, dispararPanico, registrarFalha, iniciarCicloManual, pararCiclo,
 } from './field-api.service.js'
+import { registrarCheckin as registrarAberturaCheckin } from '../abertura/abertura.service.js'
 import { prisma } from '@opencheck/database'
 
 export async function fieldApiRoutes(app: FastifyInstance) {
@@ -78,6 +79,23 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     return {
       ...config,
       agentKeyPonto: operador.pontos[0].agentKey,
+    }
+  })
+
+  // POST /abertura/checkin — abertura check-in via agentKey (app Windows)
+  app.post('/abertura/checkin', async (request, reply) => {
+    const { tenantId, pontoId, operadorId } = request.agentCtx
+    const body = (request.body ?? {}) as { nomeComputador?: string; usuarioWindows?: string }
+    try {
+      const registro = await registrarAberturaCheckin(tenantId, pontoId, {
+        operadorId: operadorId ?? undefined,
+        nomeComputador: body.nomeComputador,
+        usuarioWindows: body.usuarioWindows,
+      })
+      return reply.status(201).send(registro)
+    } catch (err: unknown) {
+      const e = err as { message: string; status?: number }
+      return reply.status(e.status ?? 500).send({ aceito: false, erro: 'ABERTURA_FALHOU', mensagem: e.message })
     }
   })
 

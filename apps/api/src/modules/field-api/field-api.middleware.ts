@@ -17,7 +17,7 @@ declare module 'fastify' {
 export async function agentKeyMiddleware(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const agentKey = request.headers['x-agent-key'] as string | undefined
 
-  if (!agentKey?.startsWith('av_')) {
+  if (!agentKey?.startsWith('oc_')) {
     return reply.status(401).send({ erro: 'AGENT_KEY_INVALIDA', mensagem: 'Chave inválida ou ausente' })
   }
 

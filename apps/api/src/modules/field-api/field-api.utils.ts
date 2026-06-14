@@ -2,8 +2,9 @@ import { randomBytes } from 'crypto'
 import { prisma } from '@opencheck/database'
 
 export function generateAgentKey(env: 'live' | 'test' = 'live'): string {
-  const random = randomBytes(16).toString('hex')
-  return `av_${env}_${random}`
+  // oc_live_<14 base64url chars> ≈ 22 chars total, ~84 bits of entropy
+  const random = randomBytes(10).toString('base64url')
+  return `oc_${env}_${random}`
 }
 
 export async function getConfigCiclo(pontoId: string, tenantId: string) {

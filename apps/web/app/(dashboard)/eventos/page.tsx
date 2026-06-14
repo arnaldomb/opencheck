@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api'
 import {
   Bell, AlertTriangle, CheckCircle, Clock, Filter, X, Shield,
   User, ChevronDown, ChevronUp, MessageCircle, Eye, EyeOff, CheckCheck, Play, Loader2,
+  AlarmClock, RefreshCw, Wrench,
 } from 'lucide-react'
 
 interface Snapshot  { id: string; imageUrl: string }
@@ -25,11 +26,15 @@ interface Evento {
 interface OperadorOpt { id: string; nome: string }
 
 const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: string; icon: React.ElementType }> = {
-  CHECKIN:           { label: 'Check-in',         badgeCls: 'bg-green-100 text-green-700',   iconCls: 'text-green-500',  icon: CheckCircle },
-  FALHA:             { label: 'Falha',             badgeCls: 'bg-orange-100 text-orange-700', iconCls: 'text-orange-500', icon: Clock },
-  PANICO:            { label: 'Pânico',            badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: AlertTriangle },
-  PANICO_SILENCIOSO: { label: 'Pânico silencioso', badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: Shield },
-  COACAO:            { label: 'Coação',            badgeCls: 'bg-purple-100 text-purple-700', iconCls: 'text-purple-600', icon: Shield },
+  CHECKIN:           { label: 'Check-in',          badgeCls: 'bg-green-100 text-green-700',   iconCls: 'text-green-500',  icon: CheckCircle },
+  ABERTURA_CHECKIN:  { label: 'Abertura',           badgeCls: 'bg-blue-100 text-blue-700',     iconCls: 'text-blue-500',   icon: AlarmClock },
+  FALHA:             { label: 'Falha',              badgeCls: 'bg-orange-100 text-orange-700', iconCls: 'text-orange-500', icon: Clock },
+  PANICO:            { label: 'Pânico',             badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: AlertTriangle },
+  PANICO_SILENCIOSO: { label: 'Pânico silencioso',  badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: Shield },
+  COACAO:            { label: 'Coação',             badgeCls: 'bg-purple-100 text-purple-700', iconCls: 'text-purple-600', icon: Shield },
+  AVISO:             { label: 'Aviso',              badgeCls: 'bg-yellow-100 text-yellow-700', iconCls: 'text-yellow-500', icon: Bell },
+  RESTAURACAO:       { label: 'Restauração',        badgeCls: 'bg-gray-100 text-gray-600',     iconCls: 'text-gray-400',   icon: RefreshCw },
+  TESTE:             { label: 'Teste',              badgeCls: 'bg-gray-100 text-gray-500',     iconCls: 'text-gray-300',   icon: Wrench },
 }
 
 function LiveStreamModal({ eventoId, onClose }: { eventoId: string; onClose: () => void }) {
@@ -222,10 +227,14 @@ export default function EventosPage() {
               <select className="input w-full" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
                 <option value="">Todos</option>
                 <option value="CHECKIN">Check-in</option>
+                <option value="ABERTURA_CHECKIN">Abertura</option>
                 <option value="FALHA">Falha</option>
                 <option value="PANICO">Pânico</option>
                 <option value="PANICO_SILENCIOSO">Pânico silencioso</option>
                 <option value="COACAO">Coação</option>
+                <option value="AVISO">Aviso</option>
+                <option value="RESTAURACAO">Restauração</option>
+                <option value="TESTE">Teste</option>
               </select>
             </div>
             <div>

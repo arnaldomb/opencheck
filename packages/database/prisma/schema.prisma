@@ -186,19 +186,30 @@ model Operador {
 // ─────────────────────────────────────
 
 model ConfigAbertura {
-  id                String   @id @default(cuid())
-  tenantId          String
-  pontoId           String   @unique
-  horaAbertura      String   // "08:00"
-  toleranciaMinutos Int      @default(30)
-  diasSemana        Int[]    // 0=Dom 1=Seg … 6=Sáb; vazio = todos os dias
-  emailAlerta       String?
-  ativo             Boolean  @default(true)
-  criadoEm          DateTime @default(now())
-  atualizadoEm      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  tenantId     String
+  pontoId      String   @unique
+  emailAlerta  String?
+  ativo        Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 
   tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ponto     Ponto              @relation(fields: [pontoId], references: [id], onDelete: Cascade)
+  turnos    TurnoAbertura[]
+  registros RegistroAbertura[]
+}
+
+model TurnoAbertura {
+  id                String   @id @default(cuid())
+  configId          String
+  diasSemana        Int[]    // 0=Dom 1=Seg … 6=Sáb; vazio = todos os dias
+  horaAbertura      String   // "08:00"
+  toleranciaMinutos Int      @default(30)
+  ativo             Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+
+  config   ConfigAbertura     @relation(fields: [configId], references: [id], onDelete: Cascade)
   registros RegistroAbertura[]
 }
 
@@ -207,6 +218,7 @@ model RegistroAbertura {
   tenantId       String
   pontoId        String
   configId       String
+  turnoId        String?
   data           DateTime       @db.Date
   status         StatusAbertura @default(AUSENTE)
   deadlineEm     DateTime
@@ -218,10 +230,11 @@ model RegistroAbertura {
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ponto    Ponto          @relation(fields: [pontoId], references: [id])
-  config   ConfigAbertura @relation(fields: [configId], references: [id])
-  operador Operador?      @relation(fields: [operadorId], references: [id])
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto    Ponto           @relation(fields: [pontoId], references: [id])
+  config   ConfigAbertura  @relation(fields: [configId], references: [id])
+  turno    TurnoAbertura?  @relation(fields: [turnoId], references: [id])
+  operador Operador?       @relation(fields: [operadorId], references: [id])
 
   @@unique([pontoId, data])
 }
@@ -457,6 +470,7 @@ enum TipoNotificacao {
 
 enum TipoEvento {
   CHECKIN
+  ABERTURA_CHECKIN
   PANICO
   PANICO_SILENCIOSO
   COACAO

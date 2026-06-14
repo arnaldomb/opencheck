@@ -12,11 +12,9 @@ export async function aberturaRoutes(app: FastifyInstance) {
     const { tenantId } = request.user as { tenantId: string }
     const { pontoId } = request.params as { pontoId: string }
     const body = request.body as {
-      horaAbertura: string
-      toleranciaMinutos?: number
-      diasSemana?: number[]
       emailAlerta?: string
       ativo?: boolean
+      turnos: { diasSemana: number[]; horaAbertura: string; toleranciaMinutos?: number }[]
     }
 
     const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId } })
@@ -25,22 +23,35 @@ export async function aberturaRoutes(app: FastifyInstance) {
     const config = await prisma.configAbertura.upsert({
       where: { pontoId },
       update: {
-        horaAbertura:      body.horaAbertura,
-        toleranciaMinutos: body.toleranciaMinutos ?? 30,
-        diasSemana:        body.diasSemana ?? [],
-        emailAlerta:       body.emailAlerta ?? null,
-        ativo:             body.ativo ?? true,
+        emailAlerta: body.emailAlerta ?? null,
+        ativo: body.ativo ?? true,
       },
       create: {
         tenantId, pontoId,
-        horaAbertura:      body.horaAbertura,
-        toleranciaMinutos: body.toleranciaMinutos ?? 30,
-        diasSemana:        body.diasSemana ?? [],
-        emailAlerta:       body.emailAlerta ?? null,
-        ativo:             body.ativo ?? true,
+        emailAlerta: body.emailAlerta ?? null,
+        ativo: body.ativo ?? true,
       },
     })
-    return config
+
+    // Substituir turnos atomicamente
+    await prisma.turnoAbertura.deleteMany({ where: { configId: config.id } })
+
+    if (body.turnos?.length) {
+      await prisma.turnoAbertura.createMany({
+        data: body.turnos.map(t => ({
+          configId: config.id,
+          diasSemana: t.diasSemana,
+          horaAbertura: t.horaAbertura,
+          toleranciaMinutos: t.toleranciaMinutos ?? 30,
+        })),
+      })
+    }
+
+    const result = await prisma.configAbertura.findUnique({
+      where: { id: config.id },
+      include: { turnos: { orderBy: { criadoEm: 'asc' } } },
+    })
+    return result
   })
 
   app.get('/config/:pontoId', async (request, reply) => {
@@ -50,7 +61,10 @@ export async function aberturaRoutes(app: FastifyInstance) {
     const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId } })
     if (!ponto) return reply.status(404).send({ error: 'Ponto não encontrado' })
 
-    const config = await prisma.configAbertura.findUnique({ where: { pontoId } })
+    const config = await prisma.configAbertura.findUnique({
+      where: { pontoId },
+      include: { turnos: { orderBy: { criadoEm: 'asc' } } },
+    })
     if (!config) return reply.status(404).send({ error: 'Configuração não encontrada' })
     return config
   })
