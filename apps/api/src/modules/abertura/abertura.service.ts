@@ -14,10 +14,13 @@ function diaSemanaEmSP(): number {
 }
 
 function calcDeadline(data: Date, horaAbertura: string, toleranciaMinutos: number): Date {
+  // horaAbertura é horário local (BRT = UTC-3). Constrói o timestamp correto em SP.
+  const spDate = data.toLocaleDateString('en-CA', { timeZone: TZ })
   const [h, m] = horaAbertura.split(':').map(Number)
-  const d = new Date(data)
-  d.setUTCHours(h, m, 0, 0)
-  return new Date(d.getTime() + toleranciaMinutos * 60_000)
+  const hh = String(h).padStart(2, '0')
+  const mm = String(m).padStart(2, '0')
+  const ms = Date.parse(`${spDate}T${hh}:${mm}:00-03:00`)
+  return new Date(ms + toleranciaMinutos * 60_000)
 }
 
 export async function registrarCheckin(

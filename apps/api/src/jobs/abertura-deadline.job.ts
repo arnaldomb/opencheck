@@ -37,9 +37,10 @@ export function aberturaDeadlineWorker(): void {
       if (!config) return
 
       const [h, m] = turno.horaAbertura.split(':').map(Number)
-      const deadline = new Date(dataDate)
-      deadline.setUTCHours(h, m, 0, 0)
-      deadline.setMinutes(deadline.getMinutes() + turno.toleranciaMinutos)
+      const spDate = dataDate.toLocaleDateString('en-CA', { timeZone: TZ })
+      const deadlineMs = Date.parse(`${spDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`)
+        + turno.toleranciaMinutos * 60_000
+      const deadline = new Date(deadlineMs)
 
       if (registro) {
         await prisma.registroAbertura.update({
@@ -74,9 +75,9 @@ export function aberturaDeadlineWorker(): void {
         if (turno.diasSemana.length > 0 && !turno.diasSemana.includes(diaSemana)) continue
 
         const [h, m] = turno.horaAbertura.split(':').map(Number)
-        const deadline = new Date(hoje)
-        deadline.setUTCHours(h, m, 0, 0)
-        const deadlineMs = deadline.getTime() + turno.toleranciaMinutos * 60_000
+        const spDate = hoje.toLocaleDateString('en-CA', { timeZone: TZ })
+        const deadlineMs = Date.parse(`${spDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-03:00`)
+          + turno.toleranciaMinutos * 60_000
         const delay = deadlineMs - Date.now()
 
         if (delay <= 0) continue
