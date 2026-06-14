@@ -55,7 +55,7 @@ model Tenant {
   usuarios     Usuario[]
   pontos       Ponto[]
   cameras      Camera[]
-  vigilantes   Vigilante[]
+  operadores   Operador[]
   assinatura   Assinatura?
   eventos      Evento[]
   ciclos       ConfigCiclo[]
@@ -146,7 +146,7 @@ model Ponto {
   agentKeyAt DateTime?
 
   tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vigilantes  Vigilante[]    @relation("VigilantePontos")
+  operadores  Operador[]  @relation("OperadorPontos")
   cameras     Camera[]
   eventos     Evento[]
   configCiclo ConfigCiclo?
@@ -154,10 +154,10 @@ model Ponto {
 }
 
 // ─────────────────────────────────────
-// VIGILANTES
+// OPERADORES
 // ─────────────────────────────────────
 
-model Vigilante {
+model Operador {
   id         String   @id @default(cuid())
   tenantId   String
   nome       String
@@ -171,7 +171,7 @@ model Vigilante {
   agentKeyAt DateTime?
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pontos Ponto[] @relation("VigilantePontos")
+  pontos Ponto[] @relation("OperadorPontos")
 
   @@unique([tenantId, codigo])
 }
@@ -346,7 +346,7 @@ model OnboardingStep {
   id          String    @id @default(cuid())
   tenantId    String    @unique
   ponto       Boolean   @default(false)
-  vigilante   Boolean   @default(false)
+  operador   Boolean   @default(false)
   ciclo       Boolean   @default(false)
   notificacao Boolean   @default(false)
   teste       Boolean   @default(false)
@@ -363,7 +363,6 @@ enum Papel {
   SUPERADMIN
   ADMIN
   OPERADOR
-  VIGILANTE
 }
 
 enum Periodicidade {
@@ -419,5 +418,5 @@ enum TipoEvento {
 
 enum AgentKeyTipo {
   PONTO
-  VIGILANTE
+  OPERADOR
 }
