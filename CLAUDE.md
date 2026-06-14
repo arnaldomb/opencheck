@@ -1,4 +1,4 @@
-# Alerta Vigia — CLAUDE.md
+# OpenCheck — CLAUDE.md
 
 ## Visão Geral do Projeto
 
@@ -41,8 +41,8 @@ traefik/        — Configuração Traefik + middlewares de segurança
 ```bash
 # Desenvolvimento
 pnpm dev                          # todos os apps em paralelo
-pnpm --filter @alerta-vigia/api dev
-pnpm --filter @alerta-vigia/web dev
+pnpm --filter @opencheck/api dev
+pnpm --filter @opencheck/web dev
 
 # Build / lint / tipos
 pnpm build
@@ -65,6 +65,7 @@ pnpm db:studio      # Prisma Studio
 - Nunca fazer operações de banco diretamente em routes — passar pelo service
 - Respostas de webhook Asaas: retornar 200 imediatamente, processar via fila BullMQ
 - Idempotência de webhooks por `evt.id` (campo `asaasEventId` na tabela `Cobranca`)
+- Terminologia: "Operador" (não "Vigilante")
 
 ## Pagamentos — Asaas API v3
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Users, Plus, Phone, Mail, MapPin, Loader2, Pencil, Trash2, X, Save, Copy, Check, Hash } from 'lucide-react'
 
-interface Vigilante {
+interface Operador {
   id: string; nome: string; email?: string; telefone?: string; rfid?: string
   ativo: boolean; pontos?: { id: string; nome: string }[]
   codigo?: string
@@ -12,11 +12,11 @@ interface Vigilante {
 
 const EMPTY = { nome: '', email: '', telefone: '', senha: '' }
 
-export default function VigilantesPage() {
-  const [vigilantes, setVigilantes] = useState<Vigilante[]>([])
+export default function OperadoresPage() {
+  const [operadores, setOperadores] = useState<Operador[]>([])
   const [loading, setLoading]       = useState(true)
   const [modal, setModal]           = useState<'novo' | 'editar' | null>(null)
-  const [editando, setEditando]     = useState<Vigilante | null>(null)
+  const [editando, setEditando]     = useState<Operador | null>(null)
   const [saving, setSaving]         = useState(false)
   const [deletando, setDeletando]   = useState<string | null>(null)
   const [gerando, setGerando]       = useState<string | null>(null)
@@ -31,8 +31,8 @@ export default function VigilantesPage() {
   async function load() {
     setLoading(true)
     try {
-      const vigs = await apiFetch<Vigilante[]>('/vigilantes')
-      setVigilantes(vigs)
+      const ops = await apiFetch<Operador[]>('/operadores')
+      setOperadores(ops)
     } finally { setLoading(false) }
   }
 
@@ -42,7 +42,7 @@ export default function VigilantesPage() {
     setForm({ ...EMPTY }); setEditando(null); setErro(''); setModal('novo')
   }
 
-  function abrirEditar(v: Vigilante) {
+  function abrirEditar(v: Operador) {
     setForm({ nome: v.nome, email: v.email ?? '', telefone: v.telefone ?? '', senha: '' })
     setEditando(v); setErro(''); setModal('editar')
   }
@@ -54,10 +54,10 @@ export default function VigilantesPage() {
     setSaving(true); setErro('')
     try {
       if (modal === 'novo') {
-        await apiFetch('/vigilantes', { method: 'POST', body: JSON.stringify(form) })
+        await apiFetch('/operadores', { method: 'POST', body: JSON.stringify(form) })
       } else if (editando) {
         const payload: Record<string, string> = { nome: form.nome, telefone: form.telefone }
-        await apiFetch(`/vigilantes/${editando.id}`, { method: 'PUT', body: JSON.stringify(payload) })
+        await apiFetch(`/operadores/${editando.id}`, { method: 'PUT', body: JSON.stringify(payload) })
       }
       fecharModal(); load()
     } catch (err) {
@@ -65,27 +65,27 @@ export default function VigilantesPage() {
     } finally { setSaving(false) }
   }
 
-  async function handleExcluir(v: Vigilante) {
-    if (!confirm(`Desativar vigilante "${v.nome}"?`)) return
+  async function handleExcluir(v: Operador) {
+    if (!confirm(`Desativar operador "${v.nome}"?`)) return
     setDeletando(v.id)
     try {
-      await apiFetch(`/vigilantes/${v.id}`, { method: 'DELETE' })
+      await apiFetch(`/operadores/${v.id}`, { method: 'DELETE' })
       load()
     } finally { setDeletando(null) }
   }
 
-  async function handleCopiar(v: Vigilante) {
+  async function handleCopiar(v: Operador) {
     if (!v.codigo) return
     await navigator.clipboard.writeText(v.codigo).catch(() => {})
     setCopied(v.id)
     setTimeout(() => setCopied(null), 2000)
   }
 
-  async function handleGerarCodigo(v: Vigilante) {
+  async function handleGerarCodigo(v: Operador) {
     setGerando(v.id)
     try {
-      const res = await apiFetch<{ id: string; codigo: string }>(`/vigilantes/${v.id}/codigo/gerar`, { method: 'POST' })
-      setVigilantes(prev => prev.map(x => x.id === v.id ? { ...x, codigo: res.codigo } : x))
+      const res = await apiFetch<{ id: string; codigo: string }>(`/operadores/${v.id}/codigo/gerar`, { method: 'POST' })
+      setOperadores(prev => prev.map(x => x.id === v.id ? { ...x, codigo: res.codigo } : x))
     } finally { setGerando(null) }
   }
 
@@ -94,11 +94,11 @@ export default function VigilantesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading font-bold text-2xl text-gray-900">Vigilantes</h1>
-          <p className="text-gray-500 text-sm mt-1">{vigilantes.length} vigilante(s) cadastrado(s)</p>
+          <h1 className="font-heading font-bold text-2xl text-gray-900">Operadores</h1>
+          <p className="text-gray-500 text-sm mt-1">{operadores.length} operador(es) cadastrado(s)</p>
         </div>
         <button onClick={abrirNovo} className="btn-primary flex items-center gap-2">
-          <Plus className="h-4 w-4" /> Novo vigilante
+          <Plus className="h-4 w-4" /> Novo operador
         </button>
       </div>
 
@@ -107,17 +107,17 @@ export default function VigilantesPage() {
         <div className="flex items-center justify-center h-48">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-ggtech-blue border-t-transparent" />
         </div>
-      ) : vigilantes.length === 0 ? (
+      ) : operadores.length === 0 ? (
         <div className="card flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
           <Users className="h-12 w-12 text-gray-200" />
-          <p className="font-medium">Nenhum vigilante cadastrado</p>
+          <p className="font-medium">Nenhum operador cadastrado</p>
           <button onClick={abrirNovo} className="btn-primary mt-2 flex items-center gap-2">
-            <Plus className="h-4 w-4" /> Cadastrar primeiro vigilante
+            <Plus className="h-4 w-4" /> Cadastrar primeiro operador
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vigilantes.map(v => (
+          {operadores.map(v => (
             <div key={v.id} className="card space-y-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -161,7 +161,7 @@ export default function VigilantesPage() {
                 {v.codigo ? (
                   <div className="flex items-center gap-2">
                     <Hash className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-500 flex-shrink-0">vigilanteId:</span>
+                    <span className="text-xs text-gray-500 flex-shrink-0">operadorId:</span>
                     <code className="flex-1 text-base font-mono font-bold text-ggtech-blue tracking-widest">{v.codigo}</code>
                     <button onClick={() => handleCopiar(v)} title="Copiar código" className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-ggtech-blue transition-colors flex-shrink-0">
                       {copied === v.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -186,7 +186,7 @@ export default function VigilantesPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b">
               <h2 className="font-heading font-semibold text-gray-800">
-                {modal === 'novo' ? 'Novo vigilante' : `Editar: ${editando?.nome}`}
+                {modal === 'novo' ? 'Novo operador' : `Editar: ${editando?.nome}`}
               </h2>
               <button onClick={fecharModal} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
                 <X className="h-5 w-5" />

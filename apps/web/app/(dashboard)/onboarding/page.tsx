@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface OnboardingStep {
-  ponto: boolean; vigilante: boolean; ciclo: boolean; notificacao: boolean; teste: boolean
+  ponto: boolean; operador: boolean; ciclo: boolean; notificacao: boolean; teste: boolean
 }
 
 const PASSOS = [
   { key: 'ponto', label: 'Criar primeiro ponto', href: '/pontos/novo', desc: 'Cadastre uma portaria ou guarita' },
-  { key: 'vigilante', label: 'Cadastrar vigilante', href: '/vigilantes', desc: 'Adicione o vigilante responsável pelo ponto' },
+  { key: 'operador', label: 'Cadastrar operador', href: '/operadores', desc: 'Adicione o operador responsável pelo ponto' },
   { key: 'ciclo', label: 'Configurar ciclo de alerta', href: '/pontos', desc: 'Defina a duração e tolerância do ciclo' },
   { key: 'notificacao', label: 'Configurar notificações', href: '/configuracoes/notificacoes', desc: 'WhatsApp ou CTRL+SAFE' },
   { key: 'teste', label: 'Realizar teste', href: '/pontos', desc: 'Inicie um ciclo e faça o check-in' },
@@ -25,7 +25,7 @@ export default function OnboardingPage() {
       headers: { Authorization: `Bearer ${token}` },
     }).then(r => r.json()).then(data => {
       setSteps(data)
-      if (data?.ponto && data?.vigilante && data?.ciclo && data?.notificacao && data?.teste) {
+      if (data?.ponto && data?.operador && data?.ciclo && data?.notificacao && data?.teste) {
         router.push('/dashboard/overview')
       }
     })
@@ -37,7 +37,7 @@ export default function OnboardingPage() {
 
   return (
     <main style={{ maxWidth: 600, margin: '0 auto', padding: 32 }}>
-      <h1>Bem-vindo ao Alerta Vigia</h1>
+      <h1>Bem-vindo ao OpenCheck</h1>
       <p>Complete os 5 passos para começar a usar a plataforma.</p>
       <p>{concluidos}/5 concluídos</p>
 

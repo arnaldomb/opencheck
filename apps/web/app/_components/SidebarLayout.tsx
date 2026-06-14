@@ -13,7 +13,7 @@ import {
 const NAV_USER = [
   { href: '/overview',                  label: 'Visão Geral',    icon: LayoutDashboard },
   { href: '/pontos',                    label: 'Pontos',         icon: MapPin },
-  { href: '/vigilantes',               label: 'Vigilantes',     icon: Users },
+  { href: '/operadores',                label: 'Operadores',     icon: Users },
   { href: '/eventos',                  label: 'Eventos',        icon: Bell },
   { href: '/cameras',                  label: 'Câmeras',        icon: Camera },
   { href: '/relatorios',               label: 'Relatórios',     icon: FileText },
@@ -76,7 +76,7 @@ export default function SidebarLayout({ children }: Props) {
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-ggtech-lightblue" />
-            <span className="text-white font-heading font-bold text-lg">Alerta Vigia</span>
+            <span className="text-white font-heading font-bold text-lg">OpenCheck</span>
           </div>
           {role === 'superadmin' && (
             <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ggtech-blue/30 text-blue-200">
