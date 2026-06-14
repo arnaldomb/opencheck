@@ -1,5 +1,5 @@
 {
-  "name": "@alerta-vigia/ezviz-sdk",
+  "name": "@opencheck/ezviz-sdk",
   "version": "0.0.1",
   "private": true,
   "type": "module",

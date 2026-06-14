@@ -1,5 +1,5 @@
 {
-  "name": "@alerta-vigia/database",
+  "name": "@opencheck/database",
   "version": "0.0.1",
   "private": true,
   "type": "module",

@@ -1,5 +1,5 @@
 {
-  "name": "@alerta-vigia/ui",
+  "name": "@opencheck/ui",
   "version": "0.0.1",
   "private": true,
   "main": "./src/index.ts",

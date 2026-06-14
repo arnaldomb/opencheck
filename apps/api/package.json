@@ -1,5 +1,5 @@
 {
-  "name": "@alerta-vigia/api",
+  "name": "@opencheck/api",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@alerta-vigia/asaas-sdk": "workspace:*",
-    "@alerta-vigia/ctrlsafe-sdk": "workspace:*",
-    "@alerta-vigia/database": "workspace:*",
-    "@alerta-vigia/ezviz-sdk": "workspace:*",
-    "@alerta-vigia/shared": "workspace:*",
+    "@opencheck/asaas-sdk": "workspace:*",
+    "@opencheck/ctrlsafe-sdk": "workspace:*",
+    "@opencheck/database": "workspace:*",
+    "@opencheck/ezviz-sdk": "workspace:*",
+    "@opencheck/shared": "workspace:*",
     "@fastify/cors": "^9.0.1",
     "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^8.0.1",

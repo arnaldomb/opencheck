@@ -1,5 +1,5 @@
 {
-  "name": "alerta-vigia",
+  "name": "opencheck",
   "private": true,
   "version": "0.0.1",
   "scripts": {
@@ -8,11 +8,11 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db:generate": "pnpm --filter @alerta-vigia/database prisma generate",
-    "db:migrate": "pnpm --filter @alerta-vigia/database prisma migrate dev",
-    "db:push": "pnpm --filter @alerta-vigia/database prisma db push",
-    "db:seed": "pnpm --filter @alerta-vigia/database prisma db seed",
-    "db:studio": "pnpm --filter @alerta-vigia/database prisma studio"
+    "db:generate": "pnpm --filter @opencheck/database prisma generate",
+    "db:migrate": "pnpm --filter @opencheck/database prisma migrate dev",
+    "db:push": "pnpm --filter @opencheck/database prisma db push",
+    "db:seed": "pnpm --filter @opencheck/database prisma db seed",
+    "db:studio": "pnpm --filter @opencheck/database prisma studio"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

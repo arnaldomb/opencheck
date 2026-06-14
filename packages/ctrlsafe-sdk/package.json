@@ -1,5 +1,5 @@
 {
-  "name": "@alerta-vigia/ctrlsafe-sdk",
+  "name": "@opencheck/ctrlsafe-sdk",
   "version": "0.0.1",
   "private": true,
   "type": "module",
