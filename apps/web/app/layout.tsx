@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Alerta Vigia',
-  description: 'Plataforma de gestão de pontos de vigilância patrimonial',
+  title: 'OpenCheck',
+  description: 'Plataforma de conformidade de abertura e verificação de operadores',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

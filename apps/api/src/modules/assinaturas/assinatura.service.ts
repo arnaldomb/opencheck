@@ -46,7 +46,7 @@ export async function criarAssinatura(
     nextDueDate: primeiraCobranca,
     value: valor,
     cycle,
-    description: `Alerta Vigia — Plano ${plano.nome} (${cycle === 'YEARLY' ? 'Anual' : 'Mensal'})`,
+    description: `OpenCheck — Plano ${plano.nome} (${cycle === 'YEARLY' ? 'Anual' : 'Mensal'})`,
     externalReference: tenantId,
   })
 
@@ -82,7 +82,7 @@ export async function upgradePlano(tenantId: string, novoPlanoId: string): Promi
 
   await asaasClient.updateSubscription(assinatura.asaasSubscriptionId!, {
     value: Number(novoPlano.valorMensal),
-    description: `Alerta Vigia — Plano ${novoPlano.nome}`,
+    description: `OpenCheck — Plano ${novoPlano.nome}`,
     updatePendingPayments: true,
   })
 

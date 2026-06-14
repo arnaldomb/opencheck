@@ -22,7 +22,7 @@ async function main() {
   console.log('🌱 Iniciando seed...')
 
   // ── SUPERADMIN ─────────────────────────────────────────────────────────────
-  const superadminEmail = process.env.SUPERADMIN_EMAIL ?? 'admin@alertavigia.com.br'
+  const superadminEmail = process.env.SUPERADMIN_EMAIL ?? 'admin@opencheck.com.br'
   const superadminSenha = process.env.SUPERADMIN_SENHA ?? 'Admin@2024!'
   await prisma.superadmin.upsert({
     where:  { email: superadminEmail },
@@ -138,8 +138,8 @@ async function main() {
     },
   })
 
-  // Vigilantes — com agentKey
-  await prisma.vigilante.upsert({
+  // Operadores — com agentKey
+  await prisma.operador.upsert({
     where: { id: 'vig-joao-silva' },
     update: { agentKey: agentKey('vig1joaosilva'), agentKeyAt: new Date(), pontos: { connect: { id: ponto1.id } } },
     create: {
@@ -149,7 +149,7 @@ async function main() {
       pontos: { connect: { id: ponto1.id } },
     },
   })
-  await prisma.vigilante.upsert({
+  await prisma.operador.upsert({
     where: { id: 'vig-marcos-oliveira' },
     update: { agentKey: agentKey('vig2marcosoliveira'), agentKeyAt: new Date(), pontos: { connect: { id: ponto2.id } } },
     create: {
@@ -159,7 +159,7 @@ async function main() {
       pontos: { connect: { id: ponto2.id } },
     },
   })
-  await prisma.vigilante.upsert({
+  await prisma.operador.upsert({
     where: { id: 'vig-roberto-costa' },
     update: { agentKey: agentKey('vig3robertocosta'), agentKeyAt: new Date(), pontos: { connect: { id: ponto3.id } } },
     create: {
@@ -258,7 +258,7 @@ async function main() {
   await prisma.onboardingStep.upsert({
     where: { tenantId: tenant1.id }, update: {},
     create: {
-      tenantId: tenant1.id, ponto: true, vigilante: true,
+      tenantId: tenant1.id, ponto: true, operador: true,
       ciclo: true, notificacao: true, teste: true, concluidoEm: diasAtras(5),
     },
   })
@@ -307,7 +307,7 @@ async function main() {
     },
   })
 
-  await prisma.vigilante.upsert({
+  await prisma.operador.upsert({
     where: { id: 'vig-pedro-ferreira' },
     update: { agentKey: agentKey('vig4pedroferreira'), agentKeyAt: new Date(), pontos: { connect: { id: ponto4.id } } },
     create: {
@@ -346,7 +346,7 @@ async function main() {
   await prisma.onboardingStep.upsert({
     where: { tenantId: tenant2.id }, update: {},
     create: {
-      tenantId: tenant2.id, ponto: true, vigilante: true,
+      tenantId: tenant2.id, ponto: true, operador: true,
       ciclo: true, notificacao: false, teste: false,
     },
   })
@@ -393,14 +393,14 @@ async function main() {
   }
   if (pontosSemKey.length) console.log(`  ✅ agentKey gerada para ${pontosSemKey.length} ponto(s) sem chave`)
 
-  const vigsSemKey = await prisma.vigilante.findMany({ where: { agentKey: null } })
-  for (const v of vigsSemKey) {
-    await prisma.vigilante.update({
+  const opsSemKey = await prisma.operador.findMany({ where: { agentKey: null } })
+  for (const v of opsSemKey) {
+    await prisma.operador.update({
       where: { id: v.id },
       data: { agentKey: `av_test_${randomBytes(16).toString('hex')}`, agentKeyAt: new Date() },
     })
   }
-  if (vigsSemKey.length) console.log(`  ✅ agentKey gerada para ${vigsSemKey.length} vigilante(s) sem chave`)
+  if (opsSemKey.length) console.log(`  ✅ agentKey gerada para ${opsSemKey.length} operador(es) sem chave`)
 
   console.log('\n✅ Seed concluído!')
   console.log('\n📋 Credenciais de acesso:')

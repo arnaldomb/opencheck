@@ -15,7 +15,7 @@ interface Ponto {
   ctrlsafeZone?: string; ctrlsafeReceiver?: string; ctrlsafeLine?: string
   ctrlsafeLicenseKey?: string; ctrlsafeAgentToken?: string; ctrlsafeInstallId?: string
 }
-interface Vigilante { id: string; nome: string; ativo: boolean; pontos?: { id: string; nome: string }[]; codigo?: string }
+interface Operador { id: string; nome: string; ativo: boolean; pontos?: { id: string; nome: string }[]; codigo?: string }
 interface Cam { id: string; deviceName?: string; deviceSerial: string; ativa: boolean; pontoId?: string }
 interface Agenda {
   id: string; diasSemana: number[]; horaInicio: string; horaFim: string; ativo: boolean
@@ -91,7 +91,7 @@ export default function PontoDetailPage() {
   const router = useRouter()
 
   const [ponto, setPonto]           = useState<Ponto | null>(null)
-  const [vigilantes, setVigilantes] = useState<Vigilante[]>([])
+  const [operadores, setOperadores] = useState<Operador[]>([])
   const [cameras, setCameras]       = useState<Cam[]>([])
   const [agendas, setAgendas]       = useState<Agenda[]>([])
   const [ciclo, setCiclo]           = useState<ConfigCiclo | null>(null)
@@ -140,7 +140,7 @@ export default function PontoDetailPage() {
   useEffect(() => {
     Promise.all([
       apiFetch<Ponto>(`/pontos/${id}`),
-      apiFetch<Vigilante[]>('/vigilantes').catch(() => []),
+      apiFetch<Operador[]>('/operadores').catch(() => []),
       apiFetch<Cam[]>('/cameras').catch(() => []),
       apiFetch<Agenda[]>(`/pontos/${id}/agendas`).catch(() => []),
       apiFetch<ConfigCiclo>(`/pontos/${id}/ciclo`).catch(() => null),
@@ -158,7 +158,7 @@ export default function PontoDetailPage() {
       })
       setLicenseKey(p.ctrlsafeLicenseKey ?? '')
       setCtrlEnabled((notif as { alertarPorCtrlSafe: boolean }).alertarPorCtrlSafe)
-      setVigilantes((vigs as Vigilante[]).filter(v => v.ativo))
+      setOperadores((vigs as Operador[]).filter(v => v.ativo))
       setCameras((cams as Cam[]).filter(c => c.ativa && c.pontoId === id))
       setAgendas(ags as Agenda[])
       const c = cic as ConfigCiclo | null
@@ -226,23 +226,23 @@ export default function PontoDetailPage() {
     loadAgendas()
   }
 
-  async function handleVincularVigilante() {
+  async function handleVincularOperador() {
     if (!selectedVig) return
     setVinculandoId(selectedVig)
     try {
-      await apiFetch(`/pontos/${id}/vigilantes/${selectedVig}`, { method: 'POST' })
-      setVigilantes(prev => prev.map(v => v.id === selectedVig
+      await apiFetch(`/pontos/${id}/operadores/${selectedVig}`, { method: 'POST' })
+      setOperadores(prev => prev.map(v => v.id === selectedVig
         ? { ...v, pontos: [...(v.pontos ?? []), { id, nome: ponto!.nome }] }
         : v))
       setSelectedVig('')
     } finally { setVinculandoId(null) }
   }
 
-  async function handleDesvincularVigilante(vigId: string) {
+  async function handleDesvincularOperador(vigId: string) {
     setVinculandoId(vigId)
     try {
-      await apiFetch(`/pontos/${id}/vigilantes/${vigId}`, { method: 'DELETE' })
-      setVigilantes(prev => prev.map(v => v.id === vigId
+      await apiFetch(`/pontos/${id}/operadores/${vigId}`, { method: 'DELETE' })
+      setOperadores(prev => prev.map(v => v.id === vigId
         ? { ...v, pontos: (v.pontos ?? []).filter(p => p.id !== id) }
         : v))
     } finally { setVinculandoId(null) }
@@ -565,20 +565,20 @@ export default function PontoDetailPage() {
         </div>
       )}
 
-      {/* Vigilantes */}
+      {/* Operadores */}
       <div className="card">
         <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Shield className="h-5 w-5 text-ggtech-blue" /> Vigilantes vinculados
+          <Shield className="h-5 w-5 text-ggtech-blue" /> Operadores vinculados
         </h2>
 
         {/* Vinculados */}
         {(() => {
-          const vinculados = vigilantes.filter(v => v.pontos?.some(p => p.id === id))
-          const disponiveis = vigilantes.filter(v => !v.pontos?.some(p => p.id === id))
+          const vinculados = operadores.filter(v => v.pontos?.some(p => p.id === id))
+          const disponiveis = operadores.filter(v => !v.pontos?.some(p => p.id === id))
           return (
             <>
               {vinculados.length === 0 ? (
-                <p className="text-sm text-gray-400 mb-3">Nenhum vigilante vinculado a este ponto.</p>
+                <p className="text-sm text-gray-400 mb-3">Nenhum operador vinculado a este ponto.</p>
               ) : (
                 <div className="space-y-2 mb-4">
                   {vinculados.map(v => (
@@ -590,7 +590,7 @@ export default function PontoDetailPage() {
                       {v.codigo && (
                         <code className="text-xs font-mono text-ggtech-blue bg-ggtech-blue/5 px-2 py-0.5 rounded">{v.codigo}</code>
                       )}
-                      <button onClick={() => handleDesvincularVigilante(v.id)} disabled={vinculandoId === v.id}
+                      <button onClick={() => handleDesvincularOperador(v.id)} disabled={vinculandoId === v.id}
                         className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Desvincular">
                         {vinculandoId === v.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                       </button>
@@ -603,12 +603,12 @@ export default function PontoDetailPage() {
               {disponiveis.length > 0 && (
                 <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
                   <select className="input flex-1 text-sm" value={selectedVig} onChange={e => setSelectedVig(e.target.value)}>
-                    <option value="">Selecionar vigilante...</option>
+                    <option value="">Selecionar operador...</option>
                     {disponiveis.map(v => (
                       <option key={v.id} value={v.id}>{v.nome}{v.codigo ? ` — ${v.codigo}` : ''}</option>
                     ))}
                   </select>
-                  <button onClick={handleVincularVigilante} disabled={!selectedVig || !!vinculandoId}
+                  <button onClick={handleVincularOperador} disabled={!selectedVig || !!vinculandoId}
                     className="btn-primary flex items-center gap-1.5 px-3 text-sm flex-shrink-0">
                     {vinculandoId && selectedVig === vinculandoId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                     Vincular

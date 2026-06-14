@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 
 interface Snapshot  { id: string; imageUrl: string }
-interface Vigilante { id: string; nome: string | null }
+interface Operador { id: string; nome: string | null }
 interface StreamData { hls: string | null; rtmp: string | null; expireTime?: string }
 
 interface Evento {
@@ -17,12 +17,12 @@ interface Evento {
   monitorado:  boolean
   pontoId?:    string
   ponto?:      { nome: string }
-  vigilante?:  Vigilante | null
+  vigilante?:  Operador | null
   meta?:       { vigilanteId?: string; codigoEvento?: string; observacao?: string }
   snapshot:    Snapshot | null
 }
 
-interface VigilanteOpt { id: string; nome: string }
+interface OperadorOpt { id: string; nome: string }
 
 const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: string; icon: React.ElementType }> = {
   CHECKIN:           { label: 'Check-in',         badgeCls: 'bg-green-100 text-green-700',   iconCls: 'text-green-500',  icon: CheckCircle },
@@ -127,7 +127,7 @@ const today = new Date().toLocaleDateString('sv-SE', { timeZone: TZ })
 export default function EventosPage() {
   const [eventos, setEventos]       = useState<Evento[]>([])
   const [loading, setLoading]       = useState(true)
-  const [vigilantes, setVigilantes] = useState<VigilanteOpt[]>([])
+  const [operadores, setOperadores] = useState<OperadorOpt[]>([])
   const [snapshotAberto, setSnapshotAberto] = useState<Snapshot | null>(null)
   const [streamEventoId, setStreamEventoId] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen]       = useState(false)
@@ -136,14 +136,14 @@ export default function EventosPage() {
 
   // Filters
   const [filtroTipo,       setFiltroTipo]       = useState('')
-  const [filtroVigilante,  setFiltroVigilante]  = useState('')
+  const [filtroOperador,   setFiltroOperador]   = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
   const [filtroDataFim,    setFiltroDataFim]    = useState('')
   const [filtroHoraInicio, setFiltroHoraInicio] = useState('')
   const [filtroHoraFim,    setFiltroHoraFim]    = useState('')
 
   useEffect(() => {
-    apiFetch<VigilanteOpt[]>('/vigilantes').then(setVigilantes).catch(() => {})
+    apiFetch<OperadorOpt[]>('/operadores').then(setOperadores).catch(() => {})
   }, [])
 
   const load = useCallback(async () => {
@@ -151,7 +151,7 @@ export default function EventosPage() {
     try {
       const params = new URLSearchParams()
       if (filtroTipo)      params.set('tipo', filtroTipo)
-      if (filtroVigilante) params.set('vigilanteId', filtroVigilante)
+      if (filtroOperador) params.set('vigilanteId', filtroOperador)
       if (filtroDataInicio) {
         params.set('dataInicio', `${filtroDataInicio}T${filtroHoraInicio || '00:00'}:00`)
       }
@@ -163,12 +163,12 @@ export default function EventosPage() {
     } finally {
       setLoading(false)
     }
-  }, [filtroTipo, filtroVigilante, filtroDataInicio, filtroDataFim, filtroHoraInicio, filtroHoraFim])
+  }, [filtroTipo, filtroOperador, filtroDataInicio, filtroDataFim, filtroHoraInicio, filtroHoraFim])
 
   useEffect(() => { load() }, [load])
 
   function limparFiltros() {
-    setFiltroTipo(''); setFiltroVigilante('')
+    setFiltroTipo(''); setFiltroOperador('')
     setFiltroDataInicio(''); setFiltroDataFim('')
     setFiltroHoraInicio(''); setFiltroHoraFim('')
   }
@@ -186,7 +186,7 @@ export default function EventosPage() {
     }
   }
 
-  const temFiltro = filtroTipo || filtroVigilante || filtroDataInicio || filtroDataFim
+  const temFiltro = filtroTipo || filtroOperador || filtroDataInicio || filtroDataFim
 
   return (
     <div className="space-y-4">
@@ -206,7 +206,7 @@ export default function EventosPage() {
           Filtros
           {temFiltro && (
             <span className="bg-white/30 text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
-              {[filtroTipo, filtroVigilante, filtroDataInicio, filtroDataFim].filter(Boolean).length}
+              {[filtroTipo, filtroOperador, filtroDataInicio, filtroDataFim].filter(Boolean).length}
             </span>
           )}
           {filtersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -229,10 +229,10 @@ export default function EventosPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Vigilante</label>
-              <select className="input w-full" value={filtroVigilante} onChange={e => setFiltroVigilante(e.target.value)}>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Operador</label>
+              <select className="input w-full" value={filtroOperador} onChange={e => setFiltroOperador(e.target.value)}>
                 <option value="">Todos</option>
-                {vigilantes.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                {operadores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
               </select>
             </div>
             <div>
@@ -284,7 +284,7 @@ export default function EventosPage() {
               <span>Tipo</span>
               <span>Código</span>
               <span>Ponto</span>
-              <span>Vigilante</span>
+              <span>Operador</span>
               <span className="text-center">Foto</span>
               <span className="text-center">Visualizar</span>
               <span className="text-center">WhatsApp</span>
@@ -321,7 +321,7 @@ export default function EventosPage() {
                       }
                     </div>
 
-                    {/* Vigilante */}
+                    {/* Operador */}
                     <div className="min-w-0 flex items-center gap-1.5">
                       {ev.vigilante?.nome ? (
                         <>

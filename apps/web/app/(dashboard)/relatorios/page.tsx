@@ -56,7 +56,7 @@ async function gerarPDF(dados: RelatorioDados) {
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
-  doc.text('Alerta Vigia', 12, 10)
+  doc.text('OpenCheck', 12, 10)
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
   doc.text('Relatório de Ciclos e Eventos', 12, 17)
@@ -105,7 +105,7 @@ async function gerarPDF(dados: RelatorioDados) {
 
   autoTable(doc, {
     startY: 63,
-    head: [['Tipo', 'Código', 'Ponto', 'Vigilante', 'Data/Hora', 'WhatsApp', 'Monitorado']],
+    head: [['Tipo', 'Código', 'Ponto', 'Operador', 'Data/Hora', 'WhatsApp', 'Monitorado']],
     body: dados.eventos.map(e => [
       TIPO_PT[e.tipo] ?? e.tipo,
       e.codigoEvento ? `#${e.codigoEvento}` : '—',
@@ -157,7 +157,7 @@ async function gerarPDF(dados: RelatorioDados) {
     doc.line(12, H - 8, W - 12, H - 8)
     doc.setTextColor(180, 180, 180)
     doc.setFontSize(7)
-    doc.text('Alerta Vigia — Sistema de Monitoramento Patrimonial', 12, H - 4)
+    doc.text('OpenCheck — Sistema de Conformidade de Abertura', 12, H - 4)
     doc.text(`Página ${i} de ${pages}`, W - 12, H - 4, { align: 'right' })
   }
 
@@ -170,7 +170,7 @@ async function gerarExcel(dados: RelatorioDados) {
 
   // Sheet Resumo
   const resumoData = [
-    ['Alerta Vigia — Relatório de Ciclos e Eventos'],
+    ['OpenCheck — Relatório de Ciclos e Eventos'],
     [],
     ['Empresa',  dados.empresa.nome],
     ['Período',  `${fmtDate(dados.periodo.de + 'T12:00:00')} a ${fmtDate(dados.periodo.ate + 'T12:00:00')}`],
@@ -190,7 +190,7 @@ async function gerarExcel(dados: RelatorioDados) {
 
   // Sheet Eventos
   const eventosData = [
-    ['Tipo', 'Código', 'Ponto', 'Vigilante', 'Data/Hora', 'WhatsApp', 'Monitorado'],
+    ['Tipo', 'Código', 'Ponto', 'Operador', 'Data/Hora', 'WhatsApp', 'Monitorado'],
     ...dados.eventos.map(e => [
       TIPO_PT[e.tipo] ?? e.tipo,
       e.codigoEvento ? `#${e.codigoEvento}` : '—',
@@ -341,7 +341,7 @@ export default function RelatoriosPage() {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-gray-400 uppercase tracking-wide">
                   <tr>
-                    {['Tipo','Código','Ponto','Vigilante','Data/Hora','WhatsApp','Monitorado'].map(h => (
+                    {['Tipo','Código','Ponto','Operador','Data/Hora','WhatsApp','Monitorado'].map(h => (
                       <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                     ))}
                   </tr>

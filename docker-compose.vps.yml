@@ -60,7 +60,7 @@ services:
       - "traefik.http.services.vigia-storage.loadbalancer.server.url=http://127.0.0.1:19000"
 
   migrate:
-    image: ghcr.io/arnaldomb/alerta-vigia-migrate:latest
+    image: ghcr.io/arnaldomb/opencheck-migrate:latest
     restart: "no"
     environment:
       TZ: America/Sao_Paulo
@@ -74,7 +74,7 @@ services:
       - internal
 
   api:
-    image: ghcr.io/arnaldomb/alerta-vigia-api:latest
+    image: ghcr.io/arnaldomb/opencheck-api:latest
     container_name: opencheck_api
     restart: unless-stopped
     ports:
@@ -132,7 +132,7 @@ services:
       - "traefik.http.services.vigia-api.loadbalancer.server.url=http://127.0.0.1:13001"
 
   web:
-    image: ghcr.io/arnaldomb/alerta-vigia-web:latest
+    image: ghcr.io/arnaldomb/opencheck-web:latest
     container_name: opencheck_web
     restart: unless-stopped
     ports:

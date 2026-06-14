@@ -36,7 +36,7 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/alerta-vigia-api:latest
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/opencheck-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -46,7 +46,7 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/alerta-vigia-web:latest
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/opencheck-web:latest
           build-args: |
             NEXT_PUBLIC_API_URL=https://vigia-api.ctrlsafe.com.br
           cache-from: type=gha
@@ -58,7 +58,7 @@ jobs:
           context: .
           file: packages/database/Dockerfile.migrate
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/alerta-vigia-migrate:latest
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/opencheck-migrate:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -74,7 +74,7 @@ jobs:
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /opt/alerta-vigia
+            cd /opt/opencheck
             docker compose -f docker-compose.vps.yml pull
             docker compose -f docker-compose.vps.yml up -d --remove-orphans
             docker image prune -f

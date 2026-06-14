@@ -9,8 +9,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-interface Ponto     { id: string; ativo: boolean }
-interface Vigilante { id: string; ativo: boolean }
+interface Ponto    { id: string; ativo: boolean }
+interface Operador { id: string; ativo: boolean }
 interface EventoStats { total: number; checkins: number; alertas: number; hoje: number }
 interface Evento {
   id: string
@@ -78,7 +78,7 @@ function isAlerta(tipo: string) {
 
 export default function OverviewPage() {
   const [pontos,      setPontos]      = useState<Ponto[]>([])
-  const [vigilantes,  setVigilantes]  = useState<Vigilante[]>([])
+  const [operadores,  setOperadores]  = useState<Operador[]>([])
   const [evStats,     setEvStats]     = useState<EventoStats | null>(null)
   const [eventos,     setEventos]     = useState<Evento[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -91,12 +91,12 @@ export default function OverviewPage() {
     try {
       const [pts, vigs, evs, evList] = await Promise.all([
         apiFetch<Ponto[]>('/pontos').catch(() => [] as Ponto[]),
-        apiFetch<Vigilante[]>('/vigilantes').catch(() => [] as Vigilante[]),
+        apiFetch<Operador[]>('/operadores').catch(() => [] as Operador[]),
         apiFetch<EventoStats>('/eventos/stats').catch(() => null),
         apiFetch<Evento[]>('/eventos?limit=15').catch(() => [] as Evento[]),
       ])
       setPontos(pts as Ponto[])
-      setVigilantes(vigs as Vigilante[])
+      setOperadores(vigs as Operador[])
       setEvStats(evs as EventoStats | null)
       setEventos(evList as Evento[])
       setLastUpdate(new Date())
@@ -113,7 +113,7 @@ export default function OverviewPage() {
   }, [fetchEventos])
 
   const pontosAtivos     = pontos.filter(p => p.ativo).length
-  const vigilantesAtivos = vigilantes.filter(v => v.ativo).length
+  const operadoresAtivos = operadores.filter(v => v.ativo).length
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -130,8 +130,8 @@ export default function OverviewPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Pontos ativos"    value={pontosAtivos}           sub={`de ${pontos.length} cadastrado(s)`} icon={MapPin}        color="bg-ggtech-blue" />
-        <StatCard label="Vigilantes ativos" value={vigilantesAtivos}      icon={Users}         color="bg-emerald-500" />
+        <StatCard label="Pontos ativos"     value={pontosAtivos}           sub={`de ${pontos.length} cadastrado(s)`} icon={MapPin}        color="bg-ggtech-blue" />
+        <StatCard label="Operadores ativos" value={operadoresAtivos}      icon={Users}         color="bg-emerald-500" />
         <StatCard label="Eventos hoje"     value={evStats?.hoje ?? 0}     icon={Activity}      color="bg-sky-500" />
         <StatCard label="Check-ins"        value={evStats?.checkins ?? 0} icon={CheckCircle}   color="bg-violet-500" />
         <StatCard label="Alertas"          value={evStats?.alertas ?? 0}  icon={AlertTriangle} color="bg-red-500" />
