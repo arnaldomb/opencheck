@@ -17,11 +17,11 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY . .
-RUN pnpm --filter @alerta-vigia/database db:generate
-RUN pnpm --filter @alerta-vigia/database build
-RUN pnpm --filter @alerta-vigia/asaas-sdk build
-RUN pnpm --filter @alerta-vigia/ezviz-sdk build
-RUN pnpm --filter @alerta-vigia/api build
+RUN pnpm --filter @opencheck/database db:generate
+RUN pnpm --filter @opencheck/database build
+RUN pnpm --filter @opencheck/asaas-sdk build
+RUN pnpm --filter @opencheck/ezviz-sdk build
+RUN pnpm --filter @opencheck/api build
 
 FROM node:20-alpine AS production
 RUN apk add --no-cache openssl

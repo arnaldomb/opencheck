@@ -19,7 +19,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN pnpm --filter @alerta-vigia/web build
+RUN pnpm --filter @opencheck/web build
 
 FROM node:20-alpine AS production
 WORKDIR /app
