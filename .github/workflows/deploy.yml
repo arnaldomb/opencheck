@@ -48,7 +48,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/opencheck-web:latest
           build-args: |
-            NEXT_PUBLIC_API_URL=https://vigia-api.ctrlsafe.com.br
+            NEXT_PUBLIC_API_URL=https://api.opencheck.ggtronic.com.br
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
