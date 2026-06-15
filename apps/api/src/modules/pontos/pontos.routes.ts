@@ -241,7 +241,7 @@ export async function pontosRoutes(app: FastifyInstance) {
     if (!licenseKey) return reply.status(400).send({ error: 'Chave de licença não informada.' })
 
     const installationId = ponto.ctrlsafeInstallId ?? randomUUID()
-    const machineName = `${ponto.nome} — Alerta Vigia`
+    const machineName = `${ponto.nome} — OpenCheck`
     const machineFingerprint = installationId.replace(/-/g, '').slice(0, 12)
 
     const { activateCtrlSafe } = await import('../../infra/ctrlsafe/ctrlsafe.service.js')

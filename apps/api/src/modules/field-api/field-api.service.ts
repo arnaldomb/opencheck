@@ -261,7 +261,6 @@ export async function dispararPanico(ctx: AgentContext, body: {
   await notificacaoQueue.add('panico', {
     tenantId: ctx.tenantId, pontoId: ctx.pontoId, eventoId: evento.id,
     tipo, codigoEvento, canal,
-    mensagem: `🚨 *${tipo.replace('_', ' ')}* — ${ponto?.nome ?? 'Ponto'}\nVigilante acionou alerta. Verifique imediatamente!`,
   }, { priority: 1 })
 
   try {

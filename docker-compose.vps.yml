@@ -54,10 +54,10 @@ services:
       retries: 5
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.vigia-storage.rule=Host(`storage.ctrlsafe.com.br`)"
-      - "traefik.http.routers.vigia-storage.entrypoints=websecure"
-      - "traefik.http.routers.vigia-storage.tls.certresolver=letsencrypt"
-      - "traefik.http.services.vigia-storage.loadbalancer.server.url=http://127.0.0.1:19000"
+      - "traefik.http.routers.opencheck-storage.rule=Host(`storage.opencheck.ggtronic.com.br`)"
+      - "traefik.http.routers.opencheck-storage.entrypoints=websecure"
+      - "traefik.http.routers.opencheck-storage.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opencheck-storage.loadbalancer.server.url=http://127.0.0.1:19000"
 
   migrate:
     image: ghcr.io/arnaldomb/opencheck-migrate:latest
@@ -109,7 +109,7 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       EMAIL_FROM: ${EMAIL_FROM}
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_URL: https://storage.ctrlsafe.com.br
+      MINIO_PUBLIC_URL: https://storage.opencheck.ggtronic.com.br
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: snapshots
@@ -126,10 +126,10 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.vigia-api.rule=Host(`vigia-api.ctrlsafe.com.br`)"
-      - "traefik.http.routers.vigia-api.entrypoints=websecure"
-      - "traefik.http.routers.vigia-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.vigia-api.loadbalancer.server.url=http://127.0.0.1:13001"
+      - "traefik.http.routers.opencheck-api.rule=Host(`api.opencheck.ggtronic.com.br`)"
+      - "traefik.http.routers.opencheck-api.entrypoints=websecure"
+      - "traefik.http.routers.opencheck-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opencheck-api.loadbalancer.server.url=http://127.0.0.1:13001"
 
   web:
     image: ghcr.io/arnaldomb/opencheck-web:latest
@@ -143,10 +143,10 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.vigia-web.rule=Host(`vigia.ctrlsafe.com.br`)"
-      - "traefik.http.routers.vigia-web.entrypoints=websecure"
-      - "traefik.http.routers.vigia-web.tls.certresolver=letsencrypt"
-      - "traefik.http.services.vigia-web.loadbalancer.server.url=http://127.0.0.1:13000"
+      - "traefik.http.routers.opencheck-web.rule=Host(`opencheck.ggtronic.com.br`)"
+      - "traefik.http.routers.opencheck-web.entrypoints=websecure"
+      - "traefik.http.routers.opencheck-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opencheck-web.loadbalancer.server.url=http://127.0.0.1:13000"
 
 networks:
   internal:

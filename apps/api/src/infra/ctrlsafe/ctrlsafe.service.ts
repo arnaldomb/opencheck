@@ -6,6 +6,7 @@ export const CTRLSAFE_EVENT_TYPE: Record<string, string> = {
   COACAO:            'duress',
   FALHA:             'failure',
   CHECKIN:           'checkin',
+  ABERTURA_AUSENTE:  'alert',
   ALERTA:            'alert',
 }
 

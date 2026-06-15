@@ -29,3 +29,11 @@ Thumbs.db
 # Chaves e tokens locais
 deploy_key
 .mcp.json
+add-secret.cjs
+
+# Arquivos temporários / locais
+*.tmp.*
+.dbg/
+debug-*.md
+.claude/
+.planning/

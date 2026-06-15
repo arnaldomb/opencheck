@@ -41,10 +41,10 @@ interface CtrlConfig {
 
 const EVENTOS_DISPONIVEIS = [
   { value: 'CHECKIN',           label: '✅ Check-in' },
+  { value: 'ABERTURA_AUSENTE',  label: '🔔 Sem Abertura' },
   { value: 'PANICO',            label: '🚨 Pânico' },
   { value: 'PANICO_SILENCIOSO', label: '🚨 Pânico Silencioso' },
   { value: 'COACAO',            label: '⚠️ Coação' },
-  { value: 'FALHA',             label: '🔴 Falha de Dispositivo' },
   { value: 'ALERTA',            label: '🔔 Alerta — Sem Check-in' },
 ]
 

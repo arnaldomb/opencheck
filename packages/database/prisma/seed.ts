@@ -105,10 +105,15 @@ async function main() {
   // Pontos — com agentKey
   const ponto1 = await prisma.ponto.upsert({
     where: { id: 'ponto-portaria-principal' },
-    update: { agentKey: agentKey('ponto1portariaprincipal'), agentKeyAt: new Date() },
+    update: {
+      nome: 'Loja 1',
+      descricao: 'Ponto de monitoramento da Loja 1',
+      agentKey: agentKey('ponto1portariaprincipal'),
+      agentKeyAt: new Date(),
+    },
     create: {
       id: 'ponto-portaria-principal', tenantId: tenant1.id,
-      nome: 'Portaria Principal', descricao: 'Entrada principal do condomínio',
+      nome: 'Loja 1', descricao: 'Ponto de monitoramento da Loja 1',
       endereco: 'Av. Paulista, 1000 – São Paulo/SP', ativo: true,
       canalAlerta: CanalAlerta.WHATSAPP,
       agentKey: agentKey('ponto1portariaprincipal'), agentKeyAt: new Date(),
@@ -116,10 +121,15 @@ async function main() {
   })
   const ponto2 = await prisma.ponto.upsert({
     where: { id: 'ponto-portaria-secundaria' },
-    update: { agentKey: agentKey('ponto2portariasecundaria'), agentKeyAt: new Date() },
+    update: {
+      nome: 'Loja 2',
+      descricao: 'Ponto de monitoramento da Loja 2',
+      agentKey: agentKey('ponto2portariasecundaria'),
+      agentKeyAt: new Date(),
+    },
     create: {
       id: 'ponto-portaria-secundaria', tenantId: tenant1.id,
-      nome: 'Portaria Secundária', descricao: 'Acesso de serviços',
+      nome: 'Loja 2', descricao: 'Ponto de monitoramento da Loja 2',
       endereco: 'Av. Paulista, 1000 – São Paulo/SP', ativo: true,
       canalAlerta: CanalAlerta.WHATSAPP,
       agentKey: agentKey('ponto2portariasecundaria'), agentKeyAt: new Date(),
@@ -127,10 +137,15 @@ async function main() {
   })
   const ponto3 = await prisma.ponto.upsert({
     where: { id: 'ponto-guarita-estacionamento' },
-    update: { agentKey: agentKey('ponto3guaritaestacionamento'), agentKeyAt: new Date() },
+    update: {
+      nome: 'Loja 3',
+      descricao: 'Ponto de monitoramento da Loja 3',
+      agentKey: agentKey('ponto3guaritaestacionamento'),
+      agentKeyAt: new Date(),
+    },
     create: {
       id: 'ponto-guarita-estacionamento', tenantId: tenant1.id,
-      nome: 'Guarita do Estacionamento', descricao: 'Controle de acesso ao estacionamento',
+      nome: 'Loja 3', descricao: 'Ponto de monitoramento da Loja 3',
       endereco: 'Av. Paulista, 1000 – São Paulo/SP', ativo: true,
       canalAlerta: CanalAlerta.WHATSAPP,
       agentKey: agentKey('ponto3guaritaestacionamento'), agentKeyAt: new Date(),

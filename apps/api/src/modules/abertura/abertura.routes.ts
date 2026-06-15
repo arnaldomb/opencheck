@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
-import { registrarCheckin, getStatus, getHistorico, getRanking } from './abertura.service.js'
+import { registrarCheckin, getStatus, getHistorico, getRanking, reagendarDeadlineHojeDoPonto } from './abertura.service.js'
 
 export async function aberturaRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
@@ -51,6 +51,9 @@ export async function aberturaRoutes(app: FastifyInstance) {
       where: { id: config.id },
       include: { turnos: { orderBy: { criadoEm: 'asc' } } },
     })
+
+    await reagendarDeadlineHojeDoPonto(tenantId, pontoId)
+
     return result
   })
 

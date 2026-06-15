@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(docker compose *)",
-      "mcp__hostinger-mcp__VPS_getProjectLogsV1"
-    ]
-  }
-}

@@ -471,6 +471,7 @@ enum TipoNotificacao {
 enum TipoEvento {
   CHECKIN
   ABERTURA_CHECKIN
+  ABERTURA_AUSENTE
   PANICO
   PANICO_SILENCIOSO
   COACAO

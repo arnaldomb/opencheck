@@ -4,6 +4,162 @@ import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { getEzvizClient } from '../../infra/ezviz/ezviz.factory.js'
 import { uploadFromUrl } from '../../infra/storage/storage.service.js'
 
+const TZ = 'America/Sao_Paulo'
+
+function dataHoraMensagem(data = new Date()): string {
+  const dataFmt = data.toLocaleDateString('pt-BR', { timeZone: TZ })
+  const horaFmt = data.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+  return `${dataFmt} às ${horaFmt}`
+}
+
+function buildMensagemCorporativa(opts: {
+  titulo: string
+  introducao: string
+  empresa: string
+  ponto: string
+  operador: string | null
+  fechamento: string
+  data?: Date
+}): string {
+  const { titulo, introducao, empresa, ponto, operador, fechamento, data } = opts
+  const responsavel = operador ?? 'Não identificado'
+
+  return (
+    `${titulo}\n\n` +
+    `${introducao}\n\n` +
+    `Empresa: ${empresa}\n` +
+    `Unidade: ${ponto}\n` +
+    `Responsável: ${responsavel}\n` +
+    `Data/Hora: ${dataHoraMensagem(data)}\n\n` +
+    `${fechamento}`
+  )
+}
+
+function buildMensagemEventoManual(opts: {
+  tipo: string
+  empresa: string
+  ponto: string
+  operador: string | null
+  data: Date
+  statusAbertura?: string | null
+}): string {
+  const { tipo, empresa, ponto, operador, data, statusAbertura } = opts
+
+  switch (tipo) {
+    case 'CHECKIN':
+      return buildMensagemCorporativa({
+        titulo: '✅ *CHECK-IN CONFIRMADO*',
+        introducao: 'O check-in da unidade foi registrado com sucesso no sistema.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Registro operacional concluído com sucesso.',
+        data,
+      })
+
+    case 'ABERTURA_CHECKIN':
+      return buildMensagemCorporativa({
+        titulo: statusAbertura === 'NO_PRAZO'
+          ? '✅ *CHECK-IN DE ABERTURA CONFIRMADO*'
+          : '⚠️ *CHECK-IN DE ABERTURA COM ATRASO*',
+        introducao: statusAbertura === 'NO_PRAZO'
+          ? 'A abertura da unidade foi realizada dentro do período operacional estabelecido.'
+          : 'A abertura da unidade foi registrada fora do período operacional estabelecido.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: statusAbertura === 'NO_PRAZO'
+          ? 'Conformidade operacional registrada com sucesso.'
+          : 'Ocorrência registrada para acompanhamento operacional.',
+        data,
+      })
+
+    case 'PANICO':
+      return buildMensagemCorporativa({
+        titulo: '🚨 *ALERTA DE PÂNICO*',
+        introducao: 'Foi registrado um acionamento de pânico na unidade.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos atuação imediata conforme os protocolos de emergência.',
+        data,
+      })
+
+    case 'PANICO_SILENCIOSO':
+      return buildMensagemCorporativa({
+        titulo: '🚨 *ALERTA DE PÂNICO SILENCIOSO*',
+        introducao: 'Foi registrado um acionamento silencioso na unidade.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos atuação discreta e imediata, sem contato direto com a unidade.',
+        data,
+      })
+
+    case 'COACAO':
+      return buildMensagemCorporativa({
+        titulo: '⚠️ *ALERTA DE COAÇÃO*',
+        introducao: 'Foi identificado um possível cenário de coação envolvendo a unidade.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos verificação imediata com abordagem discreta, sem contato direto com a unidade.',
+        data,
+      })
+
+    case 'ALERTA':
+      return buildMensagemCorporativa({
+        titulo: '🚨 *ALERTA DE CHECK-IN NÃO REALIZADO*',
+        introducao: 'Não foi identificado check-in da unidade dentro do período operacional esperado.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos a verificação imediata da situação para garantir o cumprimento dos procedimentos operacionais.',
+        data,
+      })
+
+    case 'ABERTURA_AUSENTE':
+      return buildMensagemCorporativa({
+        titulo: '🚨 *ALERTA DE ABERTURA FORA DO HORÁRIO*',
+        introducao: 'Foi identificado atraso na abertura da unidade.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos a verificação imediata da situação para garantir o cumprimento dos procedimentos operacionais.',
+        data,
+      })
+
+    default:
+      return buildMensagemCorporativa({
+        titulo: `ℹ️ *${tipo}*`,
+        introducao: 'Foi registrada uma ocorrência operacional na unidade.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos acompanhamento da ocorrência conforme os procedimentos definidos.',
+        data,
+      })
+  }
+}
+
+function buildLegendaSnapshotManual(tipo: string, ponto: string, data: Date): string {
+  const tituloPorTipo: Record<string, string> = {
+    CHECKIN: '📎 Evidência da ocorrência: Check-in confirmado',
+    ABERTURA_CHECKIN: '📎 Evidência da ocorrência: Check-in de abertura',
+    PANICO: '📎 Evidência da ocorrência: Alerta de pânico',
+    PANICO_SILENCIOSO: '📎 Evidência da ocorrência: Alerta de pânico silencioso',
+    COACAO: '📎 Evidência da ocorrência: Alerta de coação',
+    ALERTA: '📎 Evidência da ocorrência: Check-in não realizado',
+    ABERTURA_AUSENTE: '📎 Evidência da ocorrência: Abertura fora do horário',
+  }
+
+  return (
+    `${tituloPorTipo[tipo] ?? '📎 Evidência da ocorrência'}\n` +
+    `Unidade: ${ponto}\n` +
+    `Data/Hora: ${dataHoraMensagem(data)}`
+  )
+}
+
 export async function eventosRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
@@ -115,6 +271,7 @@ export async function eventosRoutes(app: FastifyInstance) {
 
     const evento = await prisma.evento.findFirst({ where: { id, tenantId } })
     if (!evento) return reply.status(404).send({ error: 'Evento não encontrado' })
+    if (evento.tipo === 'FALHA') return reply.status(400).send({ error: 'Evento de falha não é monitorado por WhatsApp.' })
 
     const { sendWhatsAppText, sendWhatsAppMedia } = await import('../../infra/evogo/evogo.service.js')
 
@@ -134,17 +291,34 @@ export async function eventosRoutes(app: FastifyInstance) {
     if (cfg.whatsappInstStatus !== 'CONECTADO') return reply.status(400).send({ error: 'WhatsApp não está conectado.' })
     if (!cfg.whatsappDestino && !cfg.whatsappGrupoJid) return reply.status(400).send({ error: 'Nenhum destino configurado (número ou grupo).' })
 
-    const ponto = evento.pontoId
-      ? await prisma.ponto.findUnique({ where: { id: evento.pontoId }, select: { nome: true } })
-      : null
+    const [ponto, tenant, operador] = await Promise.all([
+      evento.pontoId
+        ? prisma.ponto.findUnique({ where: { id: evento.pontoId }, select: { nome: true } })
+        : null,
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { nome: true } }),
+      (async () => {
+        const meta = (evento.meta as Record<string, unknown> | null) ?? {}
+        const operadorId = (meta.operadorId ?? meta.vigilanteId) as string | undefined
+        if (!operadorId) return null
+        const registro = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
+        return registro?.nome ?? null
+      })(),
+    ])
 
-    const TIPO_PT: Record<string, string> = {
-      PANICO: '🚨 PÂNICO', PANICO_SILENCIOSO: '🚨 PÂNICO SILENCIOSO',
-      COACAO: '⚠️ COAÇÃO', FALHA: '🔴 FALHA DE DISPOSITIVO', CHECKIN: '✅ CHECK-IN',
-    }
-    const tipoLabel = TIPO_PT[evento.tipo] ?? evento.tipo
-    const dataHora  = evento.ocorridoEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-    const text = `${tipoLabel}\n📍 ${ponto?.nome ?? '—'}\n🕐 ${dataHora}\n\nVerifique imediatamente.`
+    const meta = (evento.meta as Record<string, unknown> | null) ?? {}
+    const text = buildMensagemEventoManual({
+      tipo: evento.tipo,
+      empresa: tenant?.nome ?? 'Empresa',
+      ponto: ponto?.nome ?? 'Ponto',
+      operador,
+      data: evento.ocorridoEm,
+      statusAbertura: (meta.statusAbertura as string | undefined) ?? null,
+    })
+    const mediaCaption = buildLegendaSnapshotManual(
+      evento.tipo,
+      ponto?.nome ?? 'Ponto',
+      evento.ocorridoEm,
+    )
 
     const candidates = [
       cfg.evolutionInstanceToken ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionInstanceToken, instance: cfg.evolutionInstance } : null,
@@ -159,7 +333,7 @@ export async function eventosRoutes(app: FastifyInstance) {
           await sendWhatsAppText(evoConfig, to, text)
           const snapshot = await prisma.snapshot.findFirst({ where: { eventoId: id } })
           if (snapshot?.imageUrl) {
-            await sendWhatsAppMedia(evoConfig, to, snapshot.imageUrl, '📸 Snapshot do evento').catch(() => {})
+            await sendWhatsAppMedia(evoConfig, to, snapshot.imageUrl, mediaCaption).catch(() => {})
           }
           return
         } catch (err) {

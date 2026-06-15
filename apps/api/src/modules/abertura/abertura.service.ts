@@ -1,5 +1,6 @@
 import { prisma } from '@opencheck/database'
 import { aberturaQueue } from '../../infra/redis/queues.js'
+import { notificacaoQueue } from '../../infra/redis/queues.js'
 
 const TZ = 'America/Sao_Paulo'
 
@@ -20,6 +21,99 @@ function calcDeadline(data: Date, horaAbertura: string, toleranciaMinutos: numbe
   const [h, m] = horaAbertura.split(':').map(Number)
   const ms = Date.parse(`${spDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`)
   return new Date(ms + toleranciaMinutos * 60_000)
+}
+
+function jobIdAbertura(pontoId: string, data: Date): string {
+  return `abertura-${pontoId}-${data.toISOString().slice(0, 10)}`
+}
+
+function turnoDoDia<T extends { diasSemana: number[] }>(turnos: T[], diaSemana: number): T | null {
+  return turnos.find(t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana)) ?? null
+}
+
+async function removerJobSeExistir(jobId?: string | null): Promise<void> {
+  if (!jobId) return
+  const job = await aberturaQueue.getJob(jobId)
+  if (job) await job.remove().catch(() => {})
+}
+
+export async function reagendarDeadlineHojeDoPonto(tenantId: string, pontoId: string): Promise<void> {
+  const hoje = hojeEmSP()
+  const diaSemana = diaSemanaEmSP()
+
+  const existente = await prisma.registroAbertura.findUnique({
+    where: { pontoId_data: { pontoId, data: hoje } },
+  })
+
+  const jobId = jobIdAbertura(pontoId, hoje)
+  await removerJobSeExistir(jobId)
+  await removerJobSeExistir(existente?.jobId)
+
+  if (existente?.abertaEm) {
+    if (existente.jobId) {
+      await prisma.registroAbertura.update({ where: { id: existente.id }, data: { jobId: null } })
+    }
+    return
+  }
+
+  // Se o alerta do dia já foi disparado, não agenda novamente.
+  if (existente && !existente.abertaEm && !existente.jobId) return
+
+  const config = await prisma.configAbertura.findFirst({
+    where: { tenantId, pontoId, ativo: true },
+    include: {
+      turnos: {
+        where: { ativo: true },
+        orderBy: { criadoEm: 'asc' },
+      },
+    },
+  })
+
+  const turno = config ? turnoDoDia(config.turnos, diaSemana) : null
+
+  if (!config || !turno) {
+    if (existente?.jobId) {
+      await prisma.registroAbertura.update({ where: { id: existente.id }, data: { jobId: null } })
+    }
+    return
+  }
+
+  const deadline = calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos)
+  const delay = Math.max(deadline.getTime() - Date.now(), 0)
+
+  const job = await aberturaQueue.add(
+    'deadline',
+    {
+      pontoId,
+      tenantId,
+      turnoId: turno.id,
+      data: hoje.toISOString(),
+    },
+    {
+      jobId,
+      delay,
+      removeOnComplete: true,
+      removeOnFail: false,
+    },
+  )
+
+  if (existente) {
+    await prisma.registroAbertura.update({
+      where: { id: existente.id },
+      data: { jobId: job.id, deadlineEm: deadline, turnoId: turno.id },
+    })
+  }
+}
+
+export async function reagendarDeadlinesHoje(): Promise<void> {
+  const configs = await prisma.configAbertura.findMany({
+    where: { ativo: true },
+    select: { pontoId: true, tenantId: true },
+  })
+
+  for (const config of configs) {
+    await reagendarDeadlineHojeDoPonto(config.tenantId, config.pontoId)
+  }
 }
 
 export async function registrarCheckin(
@@ -89,7 +183,7 @@ export async function registrarCheckin(
     await prisma.registroAbertura.update({ where: { id: registro.id }, data: { jobId: null } })
   }
 
-  await prisma.evento.create({
+  const evento = await prisma.evento.create({
     data: {
       tenantId,
       pontoId,
@@ -102,6 +196,13 @@ export async function registrarCheckin(
         usuarioWindows: opts.usuarioWindows ?? null,
       },
     },
+  })
+
+  await notificacaoQueue.add('abertura-checkin', {
+    tenantId,
+    pontoId,
+    eventoId: evento.id,
+    tipo: 'ABERTURA_CHECKIN',
   })
 
   return registro

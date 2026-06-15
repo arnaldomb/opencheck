@@ -104,7 +104,7 @@ export async function configuracoesRoutes(app: FastifyInstance) {
 
     if (candidates.length === 0) return reply.status(503).send({ error: 'Servidor WhatsApp não configurado.' })
 
-    const text = '✅ *Alerta Vigia* — Conexão WhatsApp testada com sucesso!'
+    const text = '✅ *OpenCheck* — Conexão WhatsApp testada com sucesso!'
 
     async function sendTo(to: string) {
       let lastErr: unknown = null

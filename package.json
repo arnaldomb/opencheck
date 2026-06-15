@@ -8,7 +8,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db:generate": "pnpm --filter @opencheck/database prisma generate",
+    "db:generate": "pnpm --filter @opencheck/database db:generate",
     "db:migrate": "pnpm --filter @opencheck/database prisma migrate dev",
     "db:push": "pnpm --filter @opencheck/database prisma db push",
     "db:seed": "pnpm --filter @opencheck/database prisma db seed",
