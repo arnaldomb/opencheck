@@ -1,4 +1,4 @@
-.PHONY: dev prod stop logs migrate seed traefik-setup
+.PHONY: dev prod stop logs migrate seed traefik-setup vps-setup vps-deploy vps-logs vps-down
 
 # ── Desenvolvimento ──────────────────────────────────────────────────────────
 dev:
@@ -54,3 +54,31 @@ logs-api:
 
 logs-web:
 	docker compose -f docker-compose.prod.yml logs -f web
+
+# ── VPS (docker-compose.vps.yml) ──────────────────────────────────────────────
+# Primeira vez no servidor:
+#   git clone https://github.com/arnaldomb/opencheck.git /docker/opencheck
+#   cd /docker/opencheck
+#   cp .env.example .env && nano .env   # preencher valores reais
+#   make vps-setup
+
+vps-setup:
+	docker network create proxy 2>/dev/null || true
+	docker compose -f docker-compose.vps.yml up -d
+
+vps-deploy:
+	git pull origin main
+	docker compose -f docker-compose.vps.yml pull
+	docker compose -f docker-compose.vps.yml up -d --remove-orphans
+
+vps-down:
+	docker compose -f docker-compose.vps.yml down --remove-orphans
+
+vps-logs:
+	docker compose -f docker-compose.vps.yml logs -f
+
+vps-logs-api:
+	docker compose -f docker-compose.vps.yml logs -f api
+
+vps-logs-web:
+	docker compose -f docker-compose.vps.yml logs -f web
