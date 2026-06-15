@@ -42,11 +42,9 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio_data:/data
-    ports:
-      - "19000:9000"
-      - "19001:9001"
     networks:
       - internal
+      - proxy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 15s
@@ -54,10 +52,16 @@ services:
       retries: 5
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.opencheck-storage.rule=Host(`storage.opencheck.ggtronic.com.br`)"
       - "traefik.http.routers.opencheck-storage.entrypoints=websecure"
       - "traefik.http.routers.opencheck-storage.tls.certresolver=letsencrypt"
-      - "traefik.http.services.opencheck-storage.loadbalancer.server.url=http://127.0.0.1:19000"
+      - "traefik.http.services.opencheck-storage.loadbalancer.server.port=9000"
+      - "traefik.http.routers.opencheck-storage-console.rule=Host(`storage-console.opencheck.ggtronic.com.br`)"
+      - "traefik.http.routers.opencheck-storage-console.entrypoints=websecure"
+      - "traefik.http.routers.opencheck-storage-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.opencheck-storage-console.service=opencheck-storage-console"
+      - "traefik.http.services.opencheck-storage-console.loadbalancer.server.port=9001"
 
   migrate:
     image: ghcr.io/arnaldomb/opencheck-migrate:latest
@@ -77,8 +81,6 @@ services:
     image: ghcr.io/arnaldomb/opencheck-api:latest
     container_name: opencheck_api
     restart: unless-stopped
-    ports:
-      - "13001:3001"
     environment:
       TZ: America/Sao_Paulo
       NODE_ENV: ${NODE_ENV}
@@ -124,33 +126,42 @@ services:
         condition: service_completed_successfully
     networks:
       - internal
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.opencheck-api.rule=Host(`api.opencheck.ggtronic.com.br`)"
       - "traefik.http.routers.opencheck-api.entrypoints=websecure"
       - "traefik.http.routers.opencheck-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.opencheck-api.loadbalancer.server.url=http://127.0.0.1:13001"
+      - "traefik.http.services.opencheck-api.loadbalancer.server.port=3001"
 
   web:
     image: ghcr.io/arnaldomb/opencheck-web:latest
     container_name: opencheck_web
     restart: unless-stopped
-    ports:
-      - "13000:3000"
     healthcheck:
       disable: true
     networks:
       - internal
+      - proxy
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.opencheck-web.rule=Host(`opencheck.ggtronic.com.br`)"
       - "traefik.http.routers.opencheck-web.entrypoints=websecure"
       - "traefik.http.routers.opencheck-web.tls.certresolver=letsencrypt"
-      - "traefik.http.services.opencheck-web.loadbalancer.server.url=http://127.0.0.1:13000"
+      - "traefik.http.services.opencheck-web.loadbalancer.server.port=3000"
 
 networks:
   internal:
     driver: bridge
+  proxy:
+    external: true
 
 volumes:
   postgres_data:
