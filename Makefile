@@ -2,7 +2,7 @@
 
 # ── Desenvolvimento ──────────────────────────────────────────────────────────
 dev:
-	docker compose up -d
+	docker compose -f docker-compose.dev.yml up -d
 	pnpm install
 	pnpm db:generate
 	pnpm db:migrate
@@ -10,30 +10,10 @@ dev:
 	pnpm dev
 
 infra-up:
-	docker compose up -d
+	docker compose -f docker-compose.dev.yml up -d
 
 infra-down:
-	docker compose down
-
-# ── Produção ──────────────────────────────────────────────────────────────────
-prod:
-	docker compose -f docker-compose.prod.yml up -d
-
-prod-build:
-	docker compose -f docker-compose.prod.yml build --no-cache
-
-prod-down:
-	docker compose -f docker-compose.prod.yml down
-
-# Criar a rede externa que o Traefik usa
-traefik-network:
-	docker network create proxy 2>/dev/null || true
-
-# Setup inicial de produção (rodar uma vez)
-traefik-setup: traefik-network
-	touch traefik/dynamic/acme.json || true
-	chmod 600 traefik/dynamic/acme.json || true
-	docker compose -f docker-compose.prod.yml up -d traefik
+	docker compose -f docker-compose.dev.yml down
 
 # ── Database ──────────────────────────────────────────────────────────────────
 migrate:
@@ -49,13 +29,7 @@ studio:
 logs:
 	docker compose logs -f
 
-logs-api:
-	docker compose -f docker-compose.prod.yml logs -f api
-
-logs-web:
-	docker compose -f docker-compose.prod.yml logs -f web
-
-# ── VPS (docker-compose.vps.yml) ──────────────────────────────────────────────
+# ── VPS / Produção (docker-compose.yml) ───────────────────────────────────────
 # Primeira vez no servidor:
 #   git clone https://github.com/arnaldomb/opencheck.git /docker/opencheck
 #   cd /docker/opencheck
@@ -64,21 +38,21 @@ logs-web:
 
 vps-setup:
 	docker network create proxy 2>/dev/null || true
-	docker compose -f docker-compose.vps.yml up -d
+	docker compose up -d
 
 vps-deploy:
 	git pull origin main
-	docker compose -f docker-compose.vps.yml pull
-	docker compose -f docker-compose.vps.yml up -d --remove-orphans
+	docker compose pull
+	docker compose up -d --remove-orphans
 
 vps-down:
-	docker compose -f docker-compose.vps.yml down --remove-orphans
+	docker compose down --remove-orphans
 
 vps-logs:
-	docker compose -f docker-compose.vps.yml logs -f
+	docker compose logs -f
 
 vps-logs-api:
-	docker compose -f docker-compose.vps.yml logs -f api
+	docker compose logs -f api
 
 vps-logs-web:
-	docker compose -f docker-compose.vps.yml logs -f web
+	docker compose logs -f web
