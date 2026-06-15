@@ -17,4 +17,4 @@ RUN pnpm install --frozen-lockfile
 COPY packages/database/prisma ./packages/database/prisma
 COPY packages/database/src    ./packages/database/src
 
-CMD ["sh", "-c", "pnpm --filter @opencheck/database exec prisma db push --accept-data-loss && pnpm --filter @opencheck/database db:seed"]
+CMD ["sh", "-c", "pnpm --filter @opencheck/database exec prisma db push --accept-data-loss && pnpm --filter @opencheck/database exec prisma db execute --file ./prisma/post-push.sql --schema ./prisma/schema.prisma && pnpm --filter @opencheck/database db:seed"]
