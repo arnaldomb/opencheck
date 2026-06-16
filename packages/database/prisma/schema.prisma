@@ -130,6 +130,8 @@ model Ponto {
   nome       String
   descricao  String?
   endereco   String?
+  latitude   Float?
+  longitude  Float?
   ativo      Boolean  @default(true)
   criadoEm DateTime @default(now())
 
@@ -174,9 +176,10 @@ model Operador {
   agentKey   String?  @unique
   agentKeyAt DateTime?
 
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pontos            Ponto[]            @relation("OperadorPontos")
-  registrosAbertura RegistroAbertura[]
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pontos              Ponto[]            @relation("OperadorPontos")
+  registrosAbertura   RegistroAbertura[] @relation("OperadorAbertura")
+  registrosFechamento RegistroAbertura[] @relation("OperadorFechamento")
 
   @@unique([tenantId, codigo])
 }
@@ -191,6 +194,10 @@ model ConfigAbertura {
   pontoId      String   @unique
   emailAlerta  String?
   ativo        Boolean  @default(true)
+  // Códigos de evento para CTRL+SAFE / monitoramento
+  codigoCheckInPrazo     String  @default("1400") // ABERTURA_CHECKIN NO_PRAZO
+  codigoCheckInAtrasado  String  @default("1401") // ABERTURA_CHECKIN ATRASADO
+  codigoAusente          String  @default("1402") // ABERTURA_AUSENTE
   criadoEm    DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -201,15 +208,18 @@ model ConfigAbertura {
 }
 
 model TurnoAbertura {
-  id                String   @id @default(cuid())
-  configId          String
-  diasSemana        Int[]    // 0=Dom 1=Seg … 6=Sáb; vazio = todos os dias
-  horaAbertura      String   // "08:00"
-  toleranciaMinutos Int      @default(30)
-  ativo             Boolean  @default(true)
-  criadoEm         DateTime @default(now())
+  id                           String   @id @default(cuid())
+  configId                     String
+  diasSemana                   Int[]    // 0=Dom 1=Seg … 6=Sáb; vazio = todos os dias
+  horaAbertura                 String   // "08:00"
+  toleranciaMinutos            Int      @default(30)
+  horaFechamento               String?  // "18:00" — null = sem controle de fechamento
+  toleranciaFechamentoMinutos  Int      @default(15)
+  checkinFechamentoObrigatorio Boolean  @default(false) // false = auto-fecha; true = exige check-in
+  ativo                        Boolean  @default(true)
+  criadoEm                    DateTime @default(now())
 
-  config   ConfigAbertura     @relation(fields: [configId], references: [id], onDelete: Cascade)
+  config    ConfigAbertura     @relation(fields: [configId], references: [id], onDelete: Cascade)
   registros RegistroAbertura[]
 }
 
@@ -227,14 +237,22 @@ model RegistroAbertura {
   nomeComputador String?
   usuarioWindows String?
   jobId          String?
+
+  // Controle de fechamento
+  statusFechamento            StatusFechamento?
+  fechamentoEm                DateTime?
+  fechamentoOperadorId        String?
+  fechamentoJobId             String?
+
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt
 
-  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ponto    Ponto           @relation(fields: [pontoId], references: [id])
-  config   ConfigAbertura  @relation(fields: [configId], references: [id])
-  turno    TurnoAbertura?  @relation(fields: [turnoId], references: [id])
-  operador Operador?       @relation(fields: [operadorId], references: [id])
+  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto              Ponto           @relation(fields: [pontoId], references: [id])
+  config             ConfigAbertura  @relation(fields: [configId], references: [id])
+  turno              TurnoAbertura?  @relation(fields: [turnoId], references: [id])
+  operador           Operador?       @relation("OperadorAbertura",   fields: [operadorId],           references: [id])
+  fechamentoOperador Operador?       @relation("OperadorFechamento", fields: [fechamentoOperadorId], references: [id])
 
   @@unique([pontoId, data])
 }
@@ -373,6 +391,19 @@ model Evento {
 }
 
 // ─────────────────────────────────────
+// CONFIGURAÇÃO GLOBAL DE EVENTOS (SUPERADMIN)
+// ─────────────────────────────────────
+
+model ConfigEventoGlobal {
+  id      String @id @default("global")
+  // JSON: Record<TipoEvento, string> — código CTRL+SAFE por tipo de evento
+  codigos Json   @default("{\"CHECKIN\":\"1602\",\"PANICO\":\"1120\",\"PANICO_SILENCIOSO\":\"1122\",\"COACAO\":\"1121\",\"FALHA\":\"1130\",\"AVISO\":\"1140\",\"RESTAURACAO\":\"1150\",\"TESTE\":\"1602\",\"ABERTURA_CHECKIN\":\"1400\",\"ABERTURA_AUSENTE\":\"1402\",\"FECHAMENTO_CHECKIN\":\"1410\",\"FECHAMENTO_AUSENTE\":\"1412\"}")
+  // JSON: Record<TipoEvento, string> — tipo de evento CTRL+SAFE (alert | restore | test)
+  tiposCtrlSafe Json @default("{\"PANICO\":\"alert\",\"PANICO_SILENCIOSO\":\"alert\",\"COACAO\":\"alert\",\"FALHA\":\"alert\",\"AVISO\":\"alert\",\"RESTAURACAO\":\"restore\",\"TESTE\":\"test\",\"ABERTURA_AUSENTE\":\"alert\",\"FECHAMENTO_AUSENTE\":\"alert\"}")
+  atualizadoEm DateTime @updatedAt
+}
+
+// ─────────────────────────────────────
 // NOTIFICAÇÕES
 // ─────────────────────────────────────
 
@@ -472,6 +503,8 @@ enum TipoEvento {
   CHECKIN
   ABERTURA_CHECKIN
   ABERTURA_AUSENTE
+  FECHAMENTO_CHECKIN
+  FECHAMENTO_AUSENTE
   PANICO
   PANICO_SILENCIOSO
   COACAO
@@ -479,6 +512,13 @@ enum TipoEvento {
   AVISO
   RESTAURACAO
   TESTE
+}
+
+enum StatusFechamento {
+  NO_PRAZO
+  ATRASADO
+  AUSENTE
+  AUTO_FECHADO
 }
 
 enum AgentKeyTipo {

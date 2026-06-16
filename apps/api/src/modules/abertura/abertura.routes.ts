@@ -1,7 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
-import { registrarCheckin, getStatus, getHistorico, getRanking, reagendarDeadlineHojeDoPonto } from './abertura.service.js'
+import {
+  registrarCheckin,
+  registrarFechamento,
+  getStatus,
+  getSinotico,
+  getHistorico,
+  getRanking,
+  reagendarDeadlineHojeDoPonto,
+  reagendarFechamentoHojeDoPonto,
+} from './abertura.service.js'
 
 export async function aberturaRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
@@ -14,7 +23,14 @@ export async function aberturaRoutes(app: FastifyInstance) {
     const body = request.body as {
       emailAlerta?: string
       ativo?: boolean
-      turnos: { diasSemana: number[]; horaAbertura: string; toleranciaMinutos?: number }[]
+      turnos: {
+        diasSemana: number[]
+        horaAbertura: string
+        toleranciaMinutos?: number
+        horaFechamento?: string
+        toleranciaFechamentoMinutos?: number
+        checkinFechamentoObrigatorio?: boolean
+      }[]
     }
 
     const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId } })
@@ -33,7 +49,6 @@ export async function aberturaRoutes(app: FastifyInstance) {
       },
     })
 
-    // Substituir turnos atomicamente
     await prisma.turnoAbertura.deleteMany({ where: { configId: config.id } })
 
     if (body.turnos?.length) {
@@ -43,6 +58,9 @@ export async function aberturaRoutes(app: FastifyInstance) {
           diasSemana: t.diasSemana,
           horaAbertura: t.horaAbertura,
           toleranciaMinutos: t.toleranciaMinutos ?? 30,
+          horaFechamento: t.horaFechamento ?? null,
+          toleranciaFechamentoMinutos: t.toleranciaFechamentoMinutos ?? 15,
+          checkinFechamentoObrigatorio: t.checkinFechamentoObrigatorio ?? false,
         })),
       })
     }
@@ -53,6 +71,7 @@ export async function aberturaRoutes(app: FastifyInstance) {
     })
 
     await reagendarDeadlineHojeDoPonto(tenantId, pontoId)
+    await reagendarFechamentoHojeDoPonto(tenantId, pontoId)
 
     return result
   })
@@ -72,7 +91,7 @@ export async function aberturaRoutes(app: FastifyInstance) {
     return config
   })
 
-  // ── Check-in ──────────────────────────────────────────────────────────────
+  // ── Check-in de abertura ──────────────────────────────────────────────────
 
   app.post('/checkin', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
@@ -82,7 +101,6 @@ export async function aberturaRoutes(app: FastifyInstance) {
       nomeComputador?: string
       usuarioWindows?: string
     }
-
     try {
       const registro = await registrarCheckin(tenantId, body.pontoId, {
         operadorId:     body.operadorId,
@@ -95,8 +113,6 @@ export async function aberturaRoutes(app: FastifyInstance) {
       return reply.status(e.status ?? 500).send({ error: e.message })
     }
   })
-
-  // ── Check-in por código do operador ──────────────────────────────────────
 
   app.post('/checkin-by-codigo', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
@@ -128,11 +144,71 @@ export async function aberturaRoutes(app: FastifyInstance) {
     }
   })
 
+  // ── Check-in de fechamento ────────────────────────────────────────────────
+
+  app.post('/fechamento', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const body = request.body as {
+      pontoId: string
+      operadorId?: string
+      nomeComputador?: string
+      usuarioWindows?: string
+    }
+    try {
+      const registro = await registrarFechamento(tenantId, body.pontoId, {
+        operadorId:     body.operadorId,
+        nomeComputador: body.nomeComputador,
+        usuarioWindows: body.usuarioWindows,
+      })
+      return reply.status(201).send(registro)
+    } catch (err: unknown) {
+      const e = err as { message: string; status?: number }
+      return reply.status(e.status ?? 500).send({ error: e.message })
+    }
+  })
+
+  app.post('/fechamento-by-codigo', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const body = request.body as {
+      pontoId: string
+      codigo: string
+      nomeComputador?: string
+      usuarioWindows?: string
+    }
+
+    if (!body.codigo) return reply.status(400).send({ error: 'Campo codigo é obrigatório' })
+
+    const operador = await prisma.operador.findFirst({
+      where: { tenantId, codigo: body.codigo, ativo: true },
+      select: { id: true, nome: true },
+    })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado para este código' })
+
+    try {
+      const registro = await registrarFechamento(tenantId, body.pontoId, {
+        operadorId:     operador.id,
+        nomeComputador: body.nomeComputador,
+        usuarioWindows: body.usuarioWindows,
+      })
+      return reply.status(201).send({ ...registro, operador })
+    } catch (err: unknown) {
+      const e = err as { message: string; status?: number }
+      return reply.status(e.status ?? 500).send({ error: e.message })
+    }
+  })
+
   // ── Status do dia ─────────────────────────────────────────────────────────
 
   app.get('/status', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
     return getStatus(tenantId)
+  })
+
+  // ── Sinótico ──────────────────────────────────────────────────────────────
+
+  app.get('/sinotico', async (request) => {
+    const { tenantId } = request.user as { tenantId: string }
+    return getSinotico(tenantId)
   })
 
   // ── Histórico ─────────────────────────────────────────────────────────────

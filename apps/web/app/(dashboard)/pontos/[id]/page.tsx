@@ -6,10 +6,12 @@ import { apiFetch } from '@/lib/api'
 import {
   MapPin, ArrowLeft, Save, Trash2, Loader2, Shield, Camera,
   Key, Copy, RefreshCw, Plus, Check, CheckCircle2, X, AlarmClock, Bell,
+  LogOut,
 } from 'lucide-react'
 
 interface Ponto {
   id: string; nome: string; descricao?: string; endereco?: string
+  latitude?: number; longitude?: number
   ativo: boolean; canalAlerta?: string; agentKey?: string; agentKeyAt?: string
   ctrlsafeAccount?: string; ctrlsafePartition?: string
   ctrlsafeZone?: string; ctrlsafeReceiver?: string; ctrlsafeLine?: string
@@ -18,7 +20,13 @@ interface Ponto {
 interface Operador { id: string; nome: string; ativo: boolean; pontos?: { id: string; nome: string }[]; codigo?: string }
 interface Cam { id: string; deviceName?: string; deviceSerial: string; ativa: boolean; pontoId?: string }
 interface TurnoAbertura {
-  id?: string; diasSemana: number[]; horaAbertura: string; toleranciaMinutos: number
+  id?: string
+  diasSemana: number[]
+  horaAbertura: string
+  toleranciaMinutos: number
+  horaFechamento?: string
+  toleranciaFechamentoMinutos: number
+  checkinFechamentoObrigatorio: boolean
 }
 interface ConfigAberturaData {
   id?: string; emailAlerta?: string; ativo: boolean; turnos: TurnoAbertura[]
@@ -27,10 +35,13 @@ interface ConfigAberturaData {
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
 function TurnoForm({ onAdd }: { onAdd: (t: TurnoAbertura) => void }) {
-  const [diasSemana, setDias] = useState<number[]>([1, 2, 3, 4, 5])
-  const [horaAbertura, setHora] = useState('08:00')
-  const [toleranciaMinutos, setTolerancia] = useState(30)
-  const [erro, setErro] = useState('')
+  const [diasSemana, setDias]           = useState<number[]>([1, 2, 3, 4, 5])
+  const [horaAbertura, setHora]         = useState('08:00')
+  const [toleranciaMinutos, setToler]   = useState(30)
+  const [horaFechamento, setHoraFech]   = useState('')
+  const [toleranciaFechamentoMinutos, setTolerFech] = useState(15)
+  const [checkinFechamentoObrigatorio, setCheckin]  = useState(false)
+  const [erro, setErro]                 = useState('')
 
   function toggleDia(d: number) {
     setDias(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort())
@@ -39,13 +50,22 @@ function TurnoForm({ onAdd }: { onAdd: (t: TurnoAbertura) => void }) {
   function handleAdd() {
     if (!diasSemana.length) { setErro('Selecione ao menos um dia.'); return }
     if (!horaAbertura) { setErro('Informe o horário de abertura.'); return }
-    onAdd({ diasSemana, horaAbertura, toleranciaMinutos })
+    onAdd({
+      diasSemana,
+      horaAbertura,
+      toleranciaMinutos,
+      horaFechamento: horaFechamento || undefined,
+      toleranciaFechamentoMinutos,
+      checkinFechamentoObrigatorio,
+    })
     setErro('')
   }
 
   return (
-    <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-      <p className="text-sm font-medium text-gray-700">Novo turno de abertura</p>
+    <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-4 bg-gray-50">
+      <p className="text-sm font-medium text-gray-700">Novo turno</p>
+
+      {/* Dias */}
       <div className="flex flex-wrap gap-1.5">
         {DIAS.map((d, i) => (
           <button key={i} type="button" onClick={() => toggleDia(i)}
@@ -56,21 +76,58 @@ function TurnoForm({ onAdd }: { onAdd: (t: TurnoAbertura) => void }) {
           </button>
         ))}
       </div>
-      <div className="flex items-end gap-3">
-        <div className="flex-1">
-          <label className="label">Hora de abertura</label>
+
+      {/* Abertura */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label flex items-center gap-1"><AlarmClock className="h-3 w-3 text-green-500" /> Hora de abertura</label>
           <input type="time" className="input" value={horaAbertura} onChange={e => setHora(e.target.value)} />
         </div>
-        <div className="w-36">
-          <label className="label">Tolerância (min)</label>
-          <input type="number" min={0} className="input" value={toleranciaMinutos} onChange={e => setTolerancia(Number(e.target.value))} />
+        <div>
+          <label className="label">Tolerância abertura (min)</label>
+          <input type="number" min={0} className="input" value={toleranciaMinutos} onChange={e => setToler(Number(e.target.value))} />
         </div>
+      </div>
+
+      {/* Fechamento */}
+      <div className="border-t border-gray-200 pt-3 space-y-3">
+        <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+          <LogOut className="h-3 w-3 text-orange-400" /> Controle de fechamento (opcional)
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Hora de fechamento</label>
+            <input type="time" className="input" value={horaFechamento} onChange={e => setHoraFech(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Tolerância fechamento (min)</label>
+            <input type="number" min={0} className="input" value={toleranciaFechamentoMinutos} onChange={e => setTolerFech(Number(e.target.value))} />
+          </div>
+        </div>
+        {horaFechamento && (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" className="h-4 w-4 rounded accent-ggtech-blue"
+              checked={checkinFechamentoObrigatorio}
+              onChange={e => setCheckin(e.target.checked)} />
+            <span className="text-sm text-gray-700">
+              Exigir check-in de fechamento pelo operador
+              <span className="block text-xs text-gray-400 mt-0.5">
+                {checkinFechamentoObrigatorio
+                  ? 'Alerta se operador não fizer check-in no fechamento'
+                  : 'Fechamento automático no horário (sem check-in necessário)'}
+              </span>
+            </span>
+          </label>
+        )}
+      </div>
+
+      {erro && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
+      <div className="flex justify-end">
         <button type="button" onClick={handleAdd}
-          className="btn-primary flex items-center gap-1.5 h-10 flex-shrink-0">
-          <Check className="h-3.5 w-3.5" /> Adicionar
+          className="btn-primary flex items-center gap-1.5 h-10">
+          <Check className="h-3.5 w-3.5" /> Adicionar turno
         </button>
       </div>
-      {erro && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
     </div>
   )
 }
@@ -105,7 +162,7 @@ export default function PontoDetailPage() {
   const [erroCtrl, setErroCtrl] = useState('')
   const [actErro, setActErro]   = useState('')
 
-  const [form, setForm] = useState({ nome: '', descricao: '', endereco: '' })
+  const [form, setForm] = useState({ nome: '', descricao: '', endereco: '', latitude: '', longitude: '' })
   const [ctrlForm, setCtrlForm] = useState({
     ctrlsafeAccount: '', ctrlsafePartition: '01',
     ctrlsafeZone: '099', ctrlsafeReceiver: '001', ctrlsafeLine: '01',
@@ -127,7 +184,13 @@ export default function PontoDetailPage() {
     ]).then(([pt, vigs, cams, notif, abertura]) => {
       const p = pt as Ponto
       setPonto(p)
-      setForm({ nome: p.nome, descricao: p.descricao ?? '', endereco: p.endereco ?? '' })
+      setForm({
+        nome: p.nome,
+        descricao: p.descricao ?? '',
+        endereco: p.endereco ?? '',
+        latitude: p.latitude != null ? String(p.latitude) : '',
+        longitude: p.longitude != null ? String(p.longitude) : '',
+      })
       setCtrlForm(f => ({
         ...f,
         ctrlsafeAccount:   p.ctrlsafeAccount   ?? '',
@@ -149,7 +212,16 @@ export default function PontoDetailPage() {
     e.preventDefault()
     setSaving(true); setErro('')
     try {
-      await apiFetch(`/pontos/${id}`, { method: 'PUT', body: JSON.stringify(form) })
+      await apiFetch(`/pontos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          nome: form.nome,
+          descricao: form.descricao,
+          endereco: form.endereco,
+          latitude:  form.latitude  ? Number(form.latitude)  : null,
+          longitude: form.longitude ? Number(form.longitude) : null,
+        }),
+      })
       router.push('/pontos')
     } catch (err) {
       setErro(String(err)); setSaving(false)
@@ -299,6 +371,14 @@ export default function PontoDetailPage() {
               <label className="label">Endereço</label>
               <input className="input" placeholder="Rua, número, cidade" value={form.endereco} onChange={e => set('endereco', e.target.value)} />
             </div>
+            <div>
+              <label className="label">Latitude (opcional)</label>
+              <input type="number" step="any" className="input" placeholder="-23.5505" value={form.latitude} onChange={e => set('latitude', e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Longitude (opcional)</label>
+              <input type="number" step="any" className="input" placeholder="-46.6333" value={form.longitude} onChange={e => set('longitude', e.target.value)} />
+            </div>
             <div className="sm:col-span-2">
               <label className="label">Descrição</label>
               <textarea className="input" rows={3} value={form.descricao} onChange={e => set('descricao', e.target.value)} />
@@ -347,11 +427,11 @@ export default function PontoDetailPage() {
         )}
       </div>
 
-      {/* Controle de Abertura */}
+      {/* Controle de Abertura e Fechamento */}
       <form onSubmit={handleSaveAbertura} className="card space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-heading font-semibold text-gray-800 flex items-center gap-2">
-            <AlarmClock className="h-5 w-5 text-ggtech-blue" /> Controle de Abertura
+            <AlarmClock className="h-5 w-5 text-ggtech-blue" /> Controle de Abertura e Fechamento
           </h2>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input type="checkbox" className="h-4 w-4 rounded accent-ggtech-blue"
@@ -370,7 +450,7 @@ export default function PontoDetailPage() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-700">Turnos de abertura</p>
+            <p className="text-sm font-medium text-gray-700">Turnos</p>
             <button type="button" onClick={() => setShowTurnoForm(v => !v)}
               className="btn-ghost flex items-center gap-1 text-xs">
               <Plus className="h-3.5 w-3.5" /> Adicionar turno
@@ -384,25 +464,47 @@ export default function PontoDetailPage() {
           ) : (
             <div className="space-y-2">
               {aberturaConfig.turnos.map((t, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex gap-1">
-                      {DIAS.map((d, i) => (
-                        <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                          (t.diasSemana.length === 0 || t.diasSemana.includes(i))
-                            ? 'bg-ggtech-blue/10 text-ggtech-blue'
-                            : 'text-gray-300'
-                        }`}>{d}</span>
-                      ))}
+                <div key={idx} className="p-3 rounded-lg border border-gray-200 bg-white space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1.5 flex-1">
+                      {/* Dias */}
+                      <div className="flex gap-1 flex-wrap">
+                        {DIAS.map((d, i) => (
+                          <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            (t.diasSemana.length === 0 || t.diasSemana.includes(i))
+                              ? 'bg-ggtech-blue/10 text-ggtech-blue'
+                              : 'text-gray-300'
+                          }`}>{d}</span>
+                        ))}
+                      </div>
+                      {/* Abertura */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlarmClock className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                        <span className="font-medium text-gray-700">Abertura:</span>
+                        <span className="text-gray-600">{t.horaAbertura}</span>
+                        <span className="text-gray-400 text-xs">· tolerância {t.toleranciaMinutos} min</span>
+                      </div>
+                      {/* Fechamento */}
+                      {t.horaFechamento ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <LogOut className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+                          <span className="font-medium text-gray-700">Fechamento:</span>
+                          <span className="text-gray-600">{t.horaFechamento}</span>
+                          <span className="text-gray-400 text-xs">· tolerância {t.toleranciaFechamentoMinutos} min</span>
+                          {t.checkinFechamentoObrigatorio
+                            ? <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">check-in obrigatório</span>
+                            : <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">auto-fechamento</span>
+                          }
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400">Sem controle de fechamento</div>
+                      )}
                     </div>
-                    <span className="text-sm font-medium text-gray-700">
-                      {t.horaAbertura} <span className="text-gray-400 font-normal">· tolerância {t.toleranciaMinutos} min</span>
-                    </span>
+                    <button type="button" onClick={() => handleRemoveTurno(idx)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <button type="button" onClick={() => handleRemoveTurno(idx)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
               ))}
             </div>
@@ -412,18 +514,18 @@ export default function PontoDetailPage() {
         {erroAbertura && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroAbertura}</div>}
         {aberturaOk && (
           <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-700 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" /> Configuração de abertura salva!
+            <CheckCircle2 className="h-4 w-4" /> Configuração salva!
           </div>
         )}
         <div className="flex justify-end">
           <button type="submit" disabled={savingAbertura} className="btn-primary flex items-center gap-2">
             {savingAbertura ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {savingAbertura ? 'Salvando...' : 'Salvar abertura'}
+            {savingAbertura ? 'Salvando...' : 'Salvar turnos'}
           </button>
         </div>
       </form>
 
-      {/* CTRL+SAFE — só aparece quando habilitado globalmente */}
+      {/* CTRL+SAFE */}
       {ctrlEnabled && (
         <div className="card space-y-5">
           <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
@@ -437,12 +539,8 @@ export default function PontoDetailPage() {
           <div className="space-y-3">
             <label className="label flex items-center gap-1.5"><Key className="h-3.5 w-3.5" /> Chave de licença</label>
             <div className="flex gap-2">
-              <input
-                className="input flex-1 font-mono text-sm"
-                placeholder="LIC-XXXXXXXXXXXXXXXX"
-                value={licenseKey}
-                onChange={e => setLicenseKey(e.target.value)}
-              />
+              <input className="input flex-1 font-mono text-sm" placeholder="LIC-XXXXXXXXXXXXXXXX"
+                value={licenseKey} onChange={e => setLicenseKey(e.target.value)} />
               <button type="button" onClick={handleActivateCtrlSafe} disabled={activating || !licenseKey}
                 className="btn-primary flex items-center gap-1.5 px-4 text-sm whitespace-nowrap flex-shrink-0">
                 {activating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shield className="h-3.5 w-3.5" />}
@@ -451,7 +549,7 @@ export default function PontoDetailPage() {
             </div>
             {activateOk && (
               <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-green-700">
-                <CheckCircle2 className="h-4 w-4 flex-shrink-0" /> Licença ativada! Agent token salvo para este ponto.
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" /> Licença ativada!
               </div>
             )}
             {actErro && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">{actErro}</div>}
@@ -467,50 +565,36 @@ export default function PontoDetailPage() {
           </div>
 
           <form onSubmit={handleSaveCtrl} className="space-y-4 pt-2 border-t border-gray-100">
-            <p className="text-xs font-medium text-gray-600">Contact ID — identificadores na central de monitoramento</p>
+            <p className="text-xs font-medium text-gray-600">Contact ID</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-3">
                 <label className="label">Conta (Account) *</label>
                 <input className="input font-mono" placeholder="0001" value={ctrlForm.ctrlsafeAccount}
                   onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeAccount: e.target.value }))} />
               </div>
-              <div>
-                <label className="label">Partição</label>
+              <div><label className="label">Partição</label>
                 <input className="input font-mono" placeholder="01" value={ctrlForm.ctrlsafePartition}
-                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafePartition: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Zona</label>
+                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafePartition: e.target.value }))} /></div>
+              <div><label className="label">Zona</label>
                 <input className="input font-mono" placeholder="099" value={ctrlForm.ctrlsafeZone}
-                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeZone: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Receptor</label>
+                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeZone: e.target.value }))} /></div>
+              <div><label className="label">Receptor</label>
                 <input className="input font-mono" placeholder="001" value={ctrlForm.ctrlsafeReceiver}
-                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeReceiver: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Linha</label>
+                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeReceiver: e.target.value }))} /></div>
+              <div><label className="label">Linha</label>
                 <input className="input font-mono" placeholder="01" value={ctrlForm.ctrlsafeLine}
-                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeLine: e.target.value }))} />
-              </div>
+                  onChange={e => setCtrlForm(f => ({ ...f, ctrlsafeLine: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-4 pt-2 border-t border-gray-100">
-              <div>
-                <label className="label">Cód. Check-in</label>
+              <div><label className="label">Cód. Check-in</label>
                 <input className="input font-mono" value={ctrlForm.codigoCheckin}
-                  onChange={e => setCtrlForm(f => ({ ...f, codigoCheckin: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Cód. Pânico</label>
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoCheckin: e.target.value }))} /></div>
+              <div><label className="label">Cód. Pânico</label>
                 <input className="input font-mono" value={ctrlForm.codigoPanico}
-                  onChange={e => setCtrlForm(f => ({ ...f, codigoPanico: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Cód. Falha</label>
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoPanico: e.target.value }))} /></div>
+              <div><label className="label">Cód. Falha</label>
                 <input className="input font-mono" value={ctrlForm.codigoFalha}
-                  onChange={e => setCtrlForm(f => ({ ...f, codigoFalha: e.target.value }))} />
-              </div>
+                  onChange={e => setCtrlForm(f => ({ ...f, codigoFalha: e.target.value }))} /></div>
             </div>
             {erroCtrl && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroCtrl}</div>}
             {ctrlOk && (
@@ -552,7 +636,7 @@ export default function PontoDetailPage() {
                         <code className="text-xs font-mono text-ggtech-blue bg-ggtech-blue/5 px-2 py-0.5 rounded">{v.codigo}</code>
                       )}
                       <button onClick={() => handleDesvincularOperador(v.id)} disabled={vinculandoId === v.id}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Desvincular">
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0">
                         {vinculandoId === v.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                       </button>
                     </div>

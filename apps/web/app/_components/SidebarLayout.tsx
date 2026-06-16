@@ -7,25 +7,27 @@ import {
   LayoutDashboard, MapPin, Users, Bell, Camera,
   FileText, Settings, CreditCard, LogOut,
   Building2, DollarSign, Package, ChevronRight,
-  Shield,
+  Shield, LayoutGrid,
 } from 'lucide-react'
 
 const NAV_USER = [
-  { href: '/overview',                  label: 'Visão Geral',    icon: LayoutDashboard },
-  { href: '/pontos',                    label: 'Pontos',         icon: MapPin },
-  { href: '/operadores',                label: 'Operadores',     icon: Users },
-  { href: '/eventos',                  label: 'Eventos',        icon: Bell },
-  { href: '/cameras',                  label: 'Câmeras',        icon: Camera },
-  { href: '/relatorios',               label: 'Relatórios',     icon: FileText },
-  { href: '/configuracoes',            label: 'Configurações',  icon: Settings },
-  { href: '/plano',                    label: 'Meu Plano',      icon: CreditCard },
+  { href: '/overview',      label: 'Visão Geral',    icon: LayoutDashboard },
+  { href: '/sinotico',      label: 'Sinótico',       icon: LayoutGrid },
+  { href: '/pontos',        label: 'Pontos',         icon: MapPin },
+  { href: '/operadores',    label: 'Operadores',     icon: Users },
+  { href: '/eventos',       label: 'Eventos',        icon: Bell },
+  { href: '/cameras',       label: 'Câmeras',        icon: Camera },
+  { href: '/relatorios',    label: 'Relatórios',     icon: FileText },
+  { href: '/configuracoes', label: 'Configurações',  icon: Settings },
+  { href: '/plano',         label: 'Meu Plano',      icon: CreditCard },
 ]
 
 const NAV_SUPERADMIN = [
-  { href: '/overview',    label: 'Visão Geral', icon: LayoutDashboard },
-  { href: '/clientes',   label: 'Clientes',    icon: Building2 },
-  { href: '/planos',     label: 'Planos',      icon: Package },
-  { href: '/financeiro', label: 'Financeiro',  icon: DollarSign },
+  { href: '/overview',       label: 'Visão Geral',   icon: LayoutDashboard },
+  { href: '/clientes',       label: 'Clientes',      icon: Building2 },
+  { href: '/planos',         label: 'Planos',        icon: Package },
+  { href: '/financeiro',     label: 'Financeiro',    icon: DollarSign },
+  { href: '/eventos-config', label: 'Cód. Eventos',  icon: Bell },
 ]
 
 interface Props {

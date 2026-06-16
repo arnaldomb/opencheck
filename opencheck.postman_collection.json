@@ -278,8 +278,8 @@
               }
             },
             {
-              "name": "Salvar / atualizar config de abertura (com turnos)",
-              "description": "Substitui atomicamente todos os turnos da config de abertura.\nCada turno define dias da semana (0=Dom…6=Sab), hora de abertura e tolerância em minutos.",
+              "name": "Salvar / atualizar config de abertura (com turnos e fechamento)",
+              "description": "Substitui atomicamente todos os turnos da config de abertura.\nCada turno define dias da semana (0=Dom…6=Sab), hora de abertura, tolerância, e opcionalmente hora de fechamento com tolerância e modo de check-in.\n\nSe `horaFechamento` for definido e `checkinFechamentoObrigatorio = false`, o sistema fecha automaticamente ao atingir o deadline.\nSe `checkinFechamentoObrigatorio = true`, aguarda check-in e dispara alerta caso não ocorra.",
               "event": [{ "listen": "test", "script": { "exec": [
                 "var json = pm.response.json();",
                 "if (json.id) { pm.collectionVariables.set('configAberturaId', json.id); }",
@@ -288,7 +288,7 @@
               "request": {
                 "method": "PUT",
                 "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "body": { "mode": "raw", "raw": "{\n  \"emailAlerta\": \"supervisor@segurancatotal.com.br\",\n  \"ativo\": true,\n  \"turnos\": [\n    {\n      \"diasSemana\": [1, 2, 3, 4, 5],\n      \"horaAbertura\": \"08:00\",\n      \"toleranciaMinutos\": 30\n    },\n    {\n      \"diasSemana\": [6],\n      \"horaAbertura\": \"09:00\",\n      \"toleranciaMinutos\": 15\n    }\n  ]\n}" },
+                "body": { "mode": "raw", "raw": "{\n  \"emailAlerta\": \"supervisor@segurancatotal.com.br\",\n  \"ativo\": true,\n  \"turnos\": [\n    {\n      \"diasSemana\": [1, 2, 3, 4, 5],\n      \"horaAbertura\": \"08:00\",\n      \"toleranciaMinutos\": 30,\n      \"horaFechamento\": \"18:00\",\n      \"toleranciaFechamentoMinutos\": 15,\n      \"checkinFechamentoObrigatorio\": false\n    },\n    {\n      \"diasSemana\": [6],\n      \"horaAbertura\": \"09:00\",\n      \"toleranciaMinutos\": 15,\n      \"horaFechamento\": \"13:00\",\n      \"toleranciaFechamentoMinutos\": 10,\n      \"checkinFechamentoObrigatorio\": true\n    }\n  ]\n}" },
                 "url": { "raw": "{{baseUrl}}/abertura/config/{{pontoId}}", "host": ["{{baseUrl}}"], "path": ["abertura","config","{{pontoId}}"] }
               }
             }
@@ -343,6 +343,45 @@
               }
             },
             {
+              "name": "Registrar fechamento via agentKey (app Windows)",
+              "description": "Check-in de fechamento usando x-agent-key do ponto. Registra a hora de fechamento e cancela o job de deadline pendente.",
+              "event": [{ "listen": "test", "script": { "exec": [
+                "pm.test('Fechamento registrado', () => pm.response.to.have.status(200));"
+              ], "type": "text/javascript" } }],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"3270\",\n  \"nomeComputador\": \"DESKTOP-LOJA01\",\n  \"usuarioWindows\": \"joao.silva\"\n}" },
+                "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/fechamento", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","fechamento"] }
+              }
+            },
+            {
+              "name": "Registrar fechamento via JWT (dashboard)",
+              "description": "Check-in de fechamento autenticado por JWT. Informar pontoId no body.",
+              "event": [{ "listen": "test", "script": { "exec": [
+                "pm.test('Fechamento registrado', () => pm.response.to.have.status(200));"
+              ], "type": "text/javascript" } }],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+                "url": { "raw": "{{baseUrl}}/abertura/fechamento", "host": ["{{baseUrl}}"], "path": ["abertura","fechamento"] }
+              }
+            },
+            {
+              "name": "Registrar fechamento por código do operador",
+              "description": "Fechamento via JWT enviando o código numérico do operador. O sistema localiza o operador pelo campo `codigo`.",
+              "event": [{ "listen": "test", "script": { "exec": [
+                "pm.test('Fechamento registrado', () => pm.response.to.have.status(200));"
+              ], "type": "text/javascript" } }],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"pontoId\": \"{{pontoId}}\",\n  \"codigo\": \"3270\"\n}" },
+                "url": { "raw": "{{baseUrl}}/abertura/fechamento-by-codigo", "host": ["{{baseUrl}}"], "path": ["abertura","fechamento-by-codigo"] }
+              }
+            },
+            {
               "name": "Resolver ponto pelo nome do computador (ferramenta Windows)",
               "description": "A ferramenta Windows chama este endpoint antes do checkin para descobrir o pontoId associado à máquina.",
               "event": [{ "listen": "test", "script": { "exec": [
@@ -366,6 +405,15 @@
         {
           "name": "📊 Status e Monitoramento",
           "item": [
+            {
+              "name": "Sinótico — status em tempo real de todos os pontos",
+              "description": "Retorna todos os pontos ativos do tenant com status calculado em tempo real: ABERTA, FECHADA, PENDENTE, AUSENTE, FECHAMENTO_PENDENTE ou SEM_CONFIGURACAO.\nUsado pela página /sinotico do dashboard. Auto-refresh recomendado a cada 60s.",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{baseUrl}}/abertura/sinotico", "host": ["{{baseUrl}}"], "path": ["abertura","sinotico"] }
+              }
+            },
             {
               "name": "Status de abertura do dia (todos os pontos)",
               "description": "Retorna status de todos os pontos do tenant para o dia atual. Usado pelo dashboard em tempo real.",
@@ -905,7 +953,7 @@
         },
         {
           "name": "Check-in Abertura (agentKey — app Windows)",
-          "description": "Endpoint principal para a ferramenta Windows.\nUsa x-agent-key do ponto, sem necessidade de JWT.\nO pontoId é resolvido automaticamente a partir da chave.",
+          "description": "Endpoint principal para a ferramenta Windows.\nUsa x-agent-key do ponto, sem necessidade de JWT.\nO pontoId é resolvido automaticamente a partir da chave.\n\nCampo `codigo` (opcional): código numérico do operador (ex: '3270'). Se enviado, o sistema localiza o Operador pelo campo `codigo` no tenant e vincula ao registro.",
           "event": [{ "listen": "test", "script": { "exec": [
             "var json = pm.response.json();",
             "if (json.id) { pm.collectionVariables.set('aberturaId', json.id); }",
@@ -914,7 +962,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"joao.silva\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"3270\",\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"joao.silva\"\n}" },
             "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/checkin", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","checkin"] }
           }
         },

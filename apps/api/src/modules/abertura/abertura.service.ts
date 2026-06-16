@@ -14,17 +14,30 @@ function diaSemanaEmSP(): number {
   return spNow.getDay()
 }
 
+function agoraEmSP(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: TZ }))
+}
+
 function calcDeadline(data: Date, horaAbertura: string, toleranciaMinutos: number): Date {
-  // data = hojeEmSP() = new Date(spDate + 'T00:00:00.000Z')
-  // toISOString().slice(0,10) extrai o date string SP correto sem conversão de timezone
   const spDate = data.toISOString().slice(0, 10)
   const [h, m] = horaAbertura.split(':').map(Number)
   const ms = Date.parse(`${spDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`)
   return new Date(ms + toleranciaMinutos * 60_000)
 }
 
+function calcFechamentoDeadline(data: Date, horaFechamento: string, toleranciaMinutos: number): Date {
+  const spDate = data.toISOString().slice(0, 10)
+  const [h, m] = horaFechamento.split(':').map(Number)
+  const ms = Date.parse(`${spDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`)
+  return new Date(ms + toleranciaMinutos * 60_000)
+}
+
 function jobIdAbertura(pontoId: string, data: Date): string {
   return `abertura-${pontoId}-${data.toISOString().slice(0, 10)}`
+}
+
+function jobIdFechamento(pontoId: string, data: Date): string {
+  return `fechamento-${pontoId}-${data.toISOString().slice(0, 10)}`
 }
 
 function turnoDoDia<T extends { diasSemana: number[] }>(turnos: T[], diaSemana: number): T | null {
@@ -36,6 +49,8 @@ async function removerJobSeExistir(jobId?: string | null): Promise<void> {
   const job = await aberturaQueue.getJob(jobId)
   if (job) await job.remove().catch(() => {})
 }
+
+// ─── Abertura deadline ────────────────────────────────────────────────────────
 
 export async function reagendarDeadlineHojeDoPonto(tenantId: string, pontoId: string): Promise<void> {
   const hoje = hojeEmSP()
@@ -56,16 +71,12 @@ export async function reagendarDeadlineHojeDoPonto(tenantId: string, pontoId: st
     return
   }
 
-  // Se o alerta do dia já foi disparado, não agenda novamente.
   if (existente && !existente.abertaEm && !existente.jobId) return
 
   const config = await prisma.configAbertura.findFirst({
     where: { tenantId, pontoId, ativo: true },
     include: {
-      turnos: {
-        where: { ativo: true },
-        orderBy: { criadoEm: 'asc' },
-      },
+      turnos: { where: { ativo: true }, orderBy: { criadoEm: 'asc' } },
     },
   })
 
@@ -83,18 +94,8 @@ export async function reagendarDeadlineHojeDoPonto(tenantId: string, pontoId: st
 
   const job = await aberturaQueue.add(
     'deadline',
-    {
-      pontoId,
-      tenantId,
-      turnoId: turno.id,
-      data: hoje.toISOString(),
-    },
-    {
-      jobId,
-      delay,
-      removeOnComplete: true,
-      removeOnFail: false,
-    },
+    { pontoId, tenantId, turnoId: turno.id, data: hoje.toISOString() },
+    { jobId, delay, removeOnComplete: true, removeOnFail: false },
   )
 
   if (existente) {
@@ -110,11 +111,78 @@ export async function reagendarDeadlinesHoje(): Promise<void> {
     where: { ativo: true },
     select: { pontoId: true, tenantId: true },
   })
-
   for (const config of configs) {
     await reagendarDeadlineHojeDoPonto(config.tenantId, config.pontoId)
   }
 }
+
+// ─── Fechamento deadline ──────────────────────────────────────────────────────
+
+export async function reagendarFechamentoHojeDoPonto(tenantId: string, pontoId: string): Promise<void> {
+  const hoje = hojeEmSP()
+  const diaSemana = diaSemanaEmSP()
+
+  const existente = await prisma.registroAbertura.findUnique({
+    where: { pontoId_data: { pontoId, data: hoje } },
+  })
+
+  const jobId = jobIdFechamento(pontoId, hoje)
+  await removerJobSeExistir(jobId)
+  await removerJobSeExistir(existente?.fechamentoJobId)
+
+  // Já fechou — não reagenda
+  if (existente?.fechamentoEm) {
+    if (existente.fechamentoJobId) {
+      await prisma.registroAbertura.update({ where: { id: existente.id }, data: { fechamentoJobId: null } })
+    }
+    return
+  }
+
+  const config = await prisma.configAbertura.findFirst({
+    where: { tenantId, pontoId, ativo: true },
+    include: { turnos: { where: { ativo: true }, orderBy: { criadoEm: 'asc' } } },
+  })
+
+  const turno = config ? turnoDoDia(config.turnos, diaSemana) : null
+
+  if (!config || !turno || !turno.horaFechamento) return
+
+  const deadline = calcFechamentoDeadline(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
+  const delay = Math.max(deadline.getTime() - Date.now(), 0)
+
+  const job = await aberturaQueue.add(
+    'fechamento-deadline',
+    {
+      pontoId, tenantId, turnoId: turno.id,
+      data: hoje.toISOString(),
+      checkinObrigatorio: turno.checkinFechamentoObrigatorio,
+    },
+    { jobId, delay, removeOnComplete: true, removeOnFail: false },
+  )
+
+  if (existente) {
+    await prisma.registroAbertura.update({
+      where: { id: existente.id },
+      data: { fechamentoJobId: job.id },
+    })
+  }
+}
+
+export async function reagendarFechamentosHoje(): Promise<void> {
+  const configs = await prisma.configAbertura.findMany({
+    where: { ativo: true },
+    include: { turnos: { where: { ativo: true } } },
+  })
+  for (const config of configs) {
+    const diaSemana = diaSemanaEmSP()
+    const turno = turnoDoDia(config.turnos, diaSemana)
+    if (turno?.horaFechamento) {
+      await reagendarFechamentoHojeDoPonto(config.tenantId, config.pontoId)
+    }
+  }
+}
+
+// ─── Check-in de abertura ─────────────────────────────────────────────────────
 
 export async function registrarCheckin(
   tenantId: string,
@@ -151,7 +219,6 @@ export async function registrarCheckin(
     const deadlineAlterado = existing.deadlineEm.getTime() !== deadline.getTime()
     if (!deadlineAlterado)
       throw Object.assign(new Error('Abertura já registrada para hoje'), { status: 409 })
-    // Turno foi atualizado com novo prazo — permite novo check-in
   }
 
   const data = {
@@ -183,14 +250,18 @@ export async function registrarCheckin(
     await prisma.registroAbertura.update({ where: { id: registro.id }, data: { jobId: null } })
   }
 
+  const codigoEvento = status === 'NO_PRAZO'
+    ? config.codigoCheckInPrazo
+    : config.codigoCheckInAtrasado
+
   const evento = await prisma.evento.create({
     data: {
-      tenantId,
-      pontoId,
+      tenantId, pontoId,
       tipo: 'ABERTURA_CHECKIN',
       meta: {
         registroAberturaId: registro.id,
         statusAbertura: status,
+        codigoEvento,
         operadorId: opts.operadorId ?? null,
         nomeComputador: opts.nomeComputador ?? null,
         usuarioWindows: opts.usuarioWindows ?? null,
@@ -199,27 +270,105 @@ export async function registrarCheckin(
   })
 
   await notificacaoQueue.add('abertura-checkin', {
-    tenantId,
-    pontoId,
-    eventoId: evento.id,
-    tipo: 'ABERTURA_CHECKIN',
+    tenantId, pontoId, eventoId: evento.id, tipo: 'ABERTURA_CHECKIN', codigoEvento,
+  })
+
+  // Agenda job de fechamento se turno tiver horaFechamento
+  if (turno.horaFechamento) {
+    await reagendarFechamentoHojeDoPonto(tenantId, pontoId)
+  }
+
+  return registro
+}
+
+// ─── Check-in de fechamento ───────────────────────────────────────────────────
+
+export async function registrarFechamento(
+  tenantId: string,
+  pontoId: string,
+  opts: { operadorId?: string; nomeComputador?: string; usuarioWindows?: string },
+) {
+  const config = await prisma.configAbertura.findUnique({
+    where: { pontoId },
+    include: { turnos: { where: { ativo: true } } },
+  })
+  if (!config || !config.ativo)
+    throw Object.assign(new Error('Ponto sem configuração de abertura ativa'), { status: 400 })
+
+  const ponto = await prisma.ponto.findFirst({ where: { id: pontoId, tenantId } })
+  if (!ponto) throw Object.assign(new Error('Ponto não encontrado'), { status: 404 })
+
+  const diaSemana = diaSemanaEmSP()
+  const turno = config.turnos.find(
+    t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
+  )
+  if (!turno)
+    throw Object.assign(new Error('Sem turno configurado para hoje'), { status: 400 })
+  if (!turno.horaFechamento)
+    throw Object.assign(new Error('Este turno não tem horário de fechamento configurado'), { status: 400 })
+
+  const hoje = hojeEmSP()
+  const existing = await prisma.registroAbertura.findUnique({
+    where: { pontoId_data: { pontoId, data: hoje } },
+  })
+
+  if (!existing?.abertaEm)
+    throw Object.assign(new Error('Não há registro de abertura para este ponto hoje'), { status: 409 })
+  if (existing.fechamentoEm)
+    throw Object.assign(new Error('Fechamento já registrado para hoje'), { status: 409 })
+
+  const deadline = calcFechamentoDeadline(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
+  const agora = new Date()
+  const statusFechamento = agora <= deadline ? ('NO_PRAZO' as const) : ('ATRASADO' as const)
+
+  // Cancela job de fechamento
+  const fechJobId = existing.fechamentoJobId ?? jobIdFechamento(pontoId, hoje)
+  await removerJobSeExistir(fechJobId)
+
+  const registro = await prisma.registroAbertura.update({
+    where: { id: existing.id },
+    data: {
+      fechamentoEm:         agora,
+      statusFechamento,
+      fechamentoOperadorId: opts.operadorId ?? null,
+      fechamentoJobId:      null,
+    },
+  })
+
+  const evento = await prisma.evento.create({
+    data: {
+      tenantId, pontoId,
+      tipo: 'FECHAMENTO_CHECKIN',
+      meta: {
+        registroAberturaId: registro.id,
+        statusFechamento,
+        operadorId: opts.operadorId ?? null,
+        nomeComputador: opts.nomeComputador ?? null,
+        usuarioWindows: opts.usuarioWindows ?? null,
+      },
+    },
+  })
+
+  await notificacaoQueue.add('fechamento-checkin', {
+    tenantId, pontoId, eventoId: evento.id, tipo: 'FECHAMENTO_CHECKIN',
   })
 
   return registro
 }
 
+// ─── Status do dia ────────────────────────────────────────────────────────────
+
 export async function getStatus(tenantId: string) {
   const hoje = hojeEmSP()
   const diaSemana = diaSemanaEmSP()
+  const agora = agoraEmSP()
 
   const [pontos, registros] = await Promise.all([
     prisma.ponto.findMany({
       where: { tenantId, ativo: true },
       select: {
         id: true, nome: true,
-        configAbertura: {
-          include: { turnos: { where: { ativo: true } } },
-        },
+        configAbertura: { include: { turnos: { where: { ativo: true } } } },
       },
     }),
     prisma.registroAbertura.findMany({ where: { tenantId, data: hoje } }),
@@ -234,18 +383,131 @@ export async function getStatus(tenantId: string) {
       t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
     ) ?? null
 
+    const deadlineAbertura = turno
+      ? calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos)
+      : null
+    const deadlineFechamento = turno?.horaFechamento
+      ? calcFechamentoDeadline(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
+      : null
+
     return {
-      pontoId: p.id,
-      nome: p.nome,
+      pontoId:    p.id,
+      nome:       p.nome,
       configurado: !!cfg && !!turno,
-      horaAbertura: turno?.horaAbertura ?? null,
+      horaAbertura:    turno?.horaAbertura   ?? null,
+      horaFechamento:  turno?.horaFechamento ?? null,
       toleranciaMinutos: turno?.toleranciaMinutos ?? null,
-      status: reg?.status ?? (turno ? 'PENDENTE' : 'SEM_CONFIGURACAO'),
-      abertaEm: reg?.abertaEm ?? null,
-      deadlineEm: reg?.deadlineEm ?? (turno ? calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos) : null),
+      toleranciaFechamentoMinutos: turno?.toleranciaFechamentoMinutos ?? null,
+      checkinFechamentoObrigatorio: turno?.checkinFechamentoObrigatorio ?? false,
+      status:       reg?.status ?? (turno ? 'PENDENTE' : 'SEM_CONFIGURACAO'),
+      abertaEm:     reg?.abertaEm     ?? null,
+      deadlineEm:   deadlineAbertura,
+      statusFechamento:  reg?.statusFechamento ?? null,
+      fechamentoEm:      reg?.fechamentoEm    ?? null,
+      deadlineFechamentoEm: deadlineFechamento,
     }
   })
 }
+
+// ─── Sinótico ─────────────────────────────────────────────────────────────────
+
+type StatusSinotico =
+  | 'ABERTA'
+  | 'FECHADA'
+  | 'PENDENTE'
+  | 'AUSENTE'
+  | 'FECHAMENTO_PENDENTE'
+  | 'SEM_CONFIGURACAO'
+
+function computeStatusSinotico(opts: {
+  turno: { horaAbertura: string; toleranciaMinutos: number; horaFechamento?: string | null; toleranciaFechamentoMinutos: number; checkinFechamentoObrigatorio: boolean } | null
+  reg: { abertaEm: Date | null; status: string; fechamentoEm: Date | null; statusFechamento: string | null } | null
+  hoje: Date
+  agora: Date
+}): StatusSinotico {
+  const { turno, reg, hoje, agora } = opts
+
+  if (!turno) return 'SEM_CONFIGURACAO'
+
+  // Já fechada (check-in ou auto)
+  if (reg?.fechamentoEm || reg?.statusFechamento) return 'FECHADA'
+
+  if (reg?.abertaEm) {
+    // Aberta — verificar se está pendente de fechamento
+    if (turno.horaFechamento) {
+      const dlFech = calcFechamentoDeadline(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
+      if (agora > dlFech) {
+        return turno.checkinFechamentoObrigatorio ? 'FECHAMENTO_PENDENTE' : 'FECHADA'
+      }
+    }
+    return 'ABERTA'
+  }
+
+  // Sem abertura
+  if (reg?.status === 'AUSENTE') return 'AUSENTE'
+  const dlAbert = calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos)
+  if (agora > dlAbert) return 'AUSENTE'
+  return 'PENDENTE'
+}
+
+export async function getSinotico(tenantId: string) {
+  const hoje = hojeEmSP()
+  const diaSemana = diaSemanaEmSP()
+  const agora = agoraEmSP()
+
+  const [pontos, registros] = await Promise.all([
+    prisma.ponto.findMany({
+      where: { tenantId, ativo: true },
+      select: {
+        id: true, nome: true, endereco: true, latitude: true, longitude: true,
+        configAbertura: {
+          include: {
+            turnos: { where: { ativo: true } },
+          },
+        },
+      },
+    }),
+    prisma.registroAbertura.findMany({
+      where: { tenantId, data: hoje },
+      include: {
+        operador:           { select: { nome: true } },
+        fechamentoOperador: { select: { nome: true } },
+      },
+    }),
+  ])
+
+  const regMap = new Map(registros.map(r => [r.pontoId, r]))
+
+  return pontos.map(p => {
+    const reg   = regMap.get(p.id) ?? null
+    const cfg   = p.configAbertura
+    const turno = cfg?.turnos.find(
+      t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
+    ) ?? null
+
+    const statusAtual = computeStatusSinotico({ turno, reg, hoje, agora })
+
+    return {
+      pontoId:    p.id,
+      nome:       p.nome,
+      endereco:   p.endereco ?? null,
+      latitude:   p.latitude  ?? null,
+      longitude:  p.longitude ?? null,
+      configurado: !!cfg && !!turno,
+      horaAbertura:   turno?.horaAbertura   ?? null,
+      horaFechamento: turno?.horaFechamento ?? null,
+      checkinFechamentoObrigatorio: turno?.checkinFechamentoObrigatorio ?? false,
+      statusAtual,
+      abertaEm:             reg?.abertaEm    ?? null,
+      operadorAbertura:     reg?.operador?.nome ?? null,
+      fechamentoEm:         reg?.fechamentoEm   ?? null,
+      operadorFechamento:   reg?.fechamentoOperador?.nome ?? null,
+      statusFechamento:     reg?.statusFechamento ?? null,
+    }
+  })
+}
+
+// ─── Histórico ────────────────────────────────────────────────────────────────
 
 export async function getHistorico(
   tenantId: string,
@@ -265,19 +527,22 @@ export async function getHistorico(
     prisma.registroAbertura.findMany({
       where,
       include: {
-        ponto:    { select: { nome: true } },
-        operador: { select: { nome: true } },
-        turno:    { select: { horaAbertura: true, diasSemana: true } },
+        ponto:              { select: { nome: true } },
+        operador:           { select: { nome: true } },
+        fechamentoOperador: { select: { nome: true } },
+        turno:              { select: { horaAbertura: true, horaFechamento: true, diasSemana: true } },
       },
       orderBy: { data: 'desc' },
-      skip: (opts.page - 1) * opts.limit,
-      take: opts.limit,
+      skip:  (opts.page - 1) * opts.limit,
+      take:  opts.limit,
     }),
     prisma.registroAbertura.count({ where }),
   ])
 
   return { registros, total, page: opts.page, limit: opts.limit }
 }
+
+// ─── Ranking ──────────────────────────────────────────────────────────────────
 
 export async function getRanking(tenantId: string, dias = 30) {
   const dataInicio = new Date()
@@ -308,9 +573,9 @@ export async function getRanking(tenantId: string, dias = 30) {
         pontoId,
         nome: d.nome,
         total,
-        noPrazo: d.noPrazo,
+        noPrazo:  d.noPrazo,
         atrasado: d.atrasado,
-        ausente: d.ausente,
+        ausente:  d.ausente,
         conformidade: total > 0 ? Math.round((d.noPrazo / total) * 100) : 0,
       }
     })

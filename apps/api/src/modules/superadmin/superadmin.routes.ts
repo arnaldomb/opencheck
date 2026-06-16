@@ -106,6 +106,26 @@ export async function superadminRoutes(app: FastifyInstance) {
     return prisma.plano.update({ where: { id }, data: request.body as object })
   })
 
+  // ── Configuração global de eventos (códigos CTRL+SAFE por TipoEvento) ────────
+  app.get('/eventos-config', async () => {
+    const cfg = await prisma.configEventoGlobal.findUnique({ where: { id: 'global' } })
+    if (!cfg) {
+      return prisma.configEventoGlobal.create({
+        data: { id: 'global' },
+      })
+    }
+    return cfg
+  })
+
+  app.put('/eventos-config', async (request) => {
+    const body = request.body as { codigos?: Record<string, string>; tiposCtrlSafe?: Record<string, string> }
+    return prisma.configEventoGlobal.upsert({
+      where: { id: 'global' },
+      create: { id: 'global', ...body },
+      update: body,
+    })
+  })
+
   // ── Overview ──────────────────────────────────────────────────────────────
   app.get('/overview', async () => {
     const [totalTenants, totalAtivos, totalInadimplentes, totalReceita] = await Promise.all([

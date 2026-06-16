@@ -6,9 +6,12 @@ import { sendCtrlSafeEvent, CTRLSAFE_EVENT_TYPE } from '../infra/ctrlsafe/ctrlsa
 
 const TZ = 'America/Sao_Paulo'
 
-const TIPO_CODIGO: Record<string, string> = {
+const TIPO_CODIGO_FALLBACK: Record<string, string> = {
   PANICO: '1120', PANICO_SILENCIOSO: '1122', COACAO: '1121',
-  FALHA: '1130', CHECKIN: '1602', ALERTA: '1130', ABERTURA_AUSENTE: '1130',
+  FALHA: '1130', CHECKIN: '1602', ALERTA: '1130',
+  ABERTURA_CHECKIN: '1400', ABERTURA_AUSENTE: '1402',
+  FECHAMENTO_CHECKIN: '1410', FECHAMENTO_AUSENTE: '1412',
+  AVISO: '1140', RESTAURACAO: '1150', TESTE: '1602',
 }
 
 const PANICO_TIPOS = new Set(['PANICO', 'PANICO_SILENCIOSO', 'COACAO', 'FALHA', 'ALERTA'])
@@ -174,15 +177,16 @@ function buildMensagem(opts: {
 
 export function notificacaoWorker(): void {
   new Worker('notificacao', async (job) => {
-    const { tenantId, pontoId, eventoId, tipo, mensagem } = job.data as {
+    const { tenantId, pontoId, eventoId, tipo, mensagem, codigoEvento: codigoJob } = job.data as {
       tenantId: string
       pontoId?: string
       eventoId?: string
       tipo: string
       mensagem?: string
+      codigoEvento?: string
     }
 
-    const [wppCfg, ctrlAtivo, ponto, tenant, evento] = await Promise.all([
+    const [wppCfg, ctrlAtivo, ponto, tenant, evento, cfgGlobal] = await Promise.all([
       prisma.configNotificacao.findFirst({
         where: { tenantId, tipo: 'WHATSAPP', ativo: true },
         select: {
@@ -215,6 +219,7 @@ export function notificacaoWorker(): void {
       eventoId
         ? prisma.evento.findUnique({ where: { id: eventoId }, select: { meta: true } })
         : null,
+      prisma.configEventoGlobal.findUnique({ where: { id: 'global' } }),
     ])
 
     // Resolve nome do operador a partir do meta do evento
@@ -298,17 +303,25 @@ export function notificacaoWorker(): void {
     // ── CTRL+SAFE ─────────────────────────────────────────────────────────────
     if (ctrlAtivo && ponto?.ctrlsafeAgentToken && ponto?.ctrlsafeInstallId && ponto?.ctrlsafeAccount) {
       try {
-        const eventType = CTRLSAFE_EVENT_TYPE[tipo] ?? 'alert'
+        // Prioridade: código do job (setado pelo service) > meta do evento > config global > fallback hardcoded
+        const globalCodigos   = (cfgGlobal?.codigos    as Record<string, string> | null) ?? {}
+        const globalTipos     = (cfgGlobal?.tiposCtrlSafe as Record<string, string> | null) ?? {}
+        const codigoFinal     = codigoJob
+          ?? (meta?.codigoEvento as string | undefined)
+          ?? globalCodigos[tipo]
+          ?? TIPO_CODIGO_FALLBACK[tipo]
+          ?? '1130'
+        const eventType = globalTipos[tipo] ?? CTRLSAFE_EVENT_TYPE[tipo] ?? 'alert'
         const payload = {
           receiver:  ponto.ctrlsafeReceiver  ?? '001',
           line:      ponto.ctrlsafeLine      ?? '01',
           account:   ponto.ctrlsafeAccount,
-          event:     TIPO_CODIGO[tipo]       ?? '1130',
+          event:     codigoFinal,
           partition: ponto.ctrlsafePartition ?? '01',
           zone:      ponto.ctrlsafeZone      ?? '099',
         }
         await sendCtrlSafeEvent(ponto.ctrlsafeAgentToken, ponto.ctrlsafeInstallId, eventType, payload)
-        console.info(`[notif] CTRL+SAFE enviado — tipo: ${tipo}, account: ${ponto.ctrlsafeAccount}`)
+        console.info(`[notif] CTRL+SAFE enviado — tipo: ${tipo}, codigo: ${codigoFinal}, account: ${ponto.ctrlsafeAccount}`)
         if (eventoId) {
           await prisma.evento.update({ where: { id: eventoId }, data: { monitorado: true } }).catch(() => {})
         }

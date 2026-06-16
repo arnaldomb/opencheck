@@ -83,12 +83,28 @@ export async function fieldApiRoutes(app: FastifyInstance) {
   })
 
   // POST /abertura/checkin — abertura check-in via agentKey (app Windows)
+  // Body opcional: { codigo?: string, nomeComputador?: string, usuarioWindows?: string }
+  // Se `codigo` for enviado, faz lookup do operador pelo campo codigo no tenant
   app.post('/abertura/checkin', async (request, reply) => {
-    const { tenantId, pontoId, operadorId } = request.agentCtx
-    const body = (request.body ?? {}) as { nomeComputador?: string; usuarioWindows?: string }
+    const { tenantId, pontoId, operadorId: ctxOperadorId } = request.agentCtx
+    const body = (request.body ?? {}) as { codigo?: string; nomeComputador?: string; usuarioWindows?: string }
+
+    let resolvedOperadorId: string | undefined = ctxOperadorId ?? undefined
+
+    if (body.codigo) {
+      const operador = await prisma.operador.findFirst({
+        where: { tenantId, codigo: body.codigo, ativo: true },
+        select: { id: true },
+      })
+      if (!operador) {
+        return reply.status(404).send({ aceito: false, erro: 'OPERADOR_NAO_ENCONTRADO', mensagem: 'Código de operador não encontrado' })
+      }
+      resolvedOperadorId = operador.id
+    }
+
     try {
       const registro = await registrarAberturaCheckin(tenantId, pontoId, {
-        operadorId: operadorId ?? undefined,
+        operadorId:     resolvedOperadorId,
         nomeComputador: body.nomeComputador,
         usuarioWindows: body.usuarioWindows,
       })
