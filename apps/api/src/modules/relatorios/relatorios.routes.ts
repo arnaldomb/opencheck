@@ -44,25 +44,28 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       }),
     ])
 
-    // Resolve vigilante names for events
-    const vigIds = [...new Set(
-      eventos.map(e => (e.meta as Record<string, string> | null)?.vigilanteId).filter(Boolean)
+    // Resolve operator names from meta.vigilanteId or meta.operadorId
+    const opIds = [...new Set(
+      eventos.flatMap(e => {
+        const meta = e.meta as Record<string, string> | null
+        return [meta?.vigilanteId, meta?.operadorId].filter(Boolean)
+      })
     )] as string[]
-    const vigilantes = vigIds.length
-      ? await prisma.operador.findMany({ where: { id: { in: vigIds } }, select: { id: true, nome: true } })
+    const vigilantes = opIds.length
+      ? await prisma.operador.findMany({ where: { id: { in: opIds } }, select: { id: true, nome: true } })
       : []
     const vigMap = new Map(vigilantes.map(v => [v.id, v.nome]))
 
     const eventosFormatados = eventos.map(e => {
-      const meta   = e.meta as Record<string, string> | null
-      const vigId  = meta?.vigilanteId
+      const meta        = e.meta as Record<string, string> | null
+      const resolvedId  = meta?.vigilanteId ?? meta?.operadorId
       return {
         id:           e.id,
         tipo:         e.tipo,
         codigoEvento: meta?.codigoEvento ?? null,
         observacao:   meta?.observacao   ?? null,
         ponto:        e.ponto?.nome      ?? '—',
-        vigilante:    vigId ? (vigMap.get(vigId) ?? '—') : '—',
+        vigilante:    resolvedId ? (vigMap.get(resolvedId) ?? '—') : '—',
         ocorridoEm:   e.ocorridoEm.toISOString(),
         encaminhado:  e.encaminhado,
         monitorado:   !!(meta?.monitorado),

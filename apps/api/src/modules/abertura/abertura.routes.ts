@@ -96,6 +96,38 @@ export async function aberturaRoutes(app: FastifyInstance) {
     }
   })
 
+  // ── Check-in por código do operador ──────────────────────────────────────
+
+  app.post('/checkin-by-codigo', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const body = request.body as {
+      pontoId: string
+      codigo: string
+      nomeComputador?: string
+      usuarioWindows?: string
+    }
+
+    if (!body.codigo) return reply.status(400).send({ error: 'Campo codigo é obrigatório' })
+
+    const operador = await prisma.operador.findFirst({
+      where: { tenantId, codigo: body.codigo, ativo: true },
+      select: { id: true, nome: true },
+    })
+    if (!operador) return reply.status(404).send({ error: 'Operador não encontrado para este código' })
+
+    try {
+      const registro = await registrarCheckin(tenantId, body.pontoId, {
+        operadorId:     operador.id,
+        nomeComputador: body.nomeComputador,
+        usuarioWindows: body.usuarioWindows,
+      })
+      return reply.status(201).send({ ...registro, operador })
+    } catch (err: unknown) {
+      const e = err as { message: string; status?: number }
+      return reply.status(e.status ?? 500).send({ error: e.message })
+    }
+  })
+
   // ── Status do dia ─────────────────────────────────────────────────────────
 
   app.get('/status', async (request) => {

@@ -328,6 +328,21 @@
               }
             },
             {
+              "name": "Registrar abertura por código do operador",
+              "description": "Check-in via JWT enviando o código numérico do operador (ex: 2027). O sistema localiza o operador pelo campo `codigo` e registra a abertura.",
+              "event": [{ "listen": "test", "script": { "exec": [
+                "var json = pm.response.json();",
+                "if (json.id) { pm.collectionVariables.set('aberturaId', json.id); }",
+                "pm.test('Check-in registrado', () => pm.response.to.have.status(201));"
+              ], "type": "text/javascript" } }],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"pontoId\": \"{{pontoId}}\",\n  \"codigo\": \"2027\"\n}" },
+                "url": { "raw": "{{baseUrl}}/abertura/checkin-by-codigo", "host": ["{{baseUrl}}"], "path": ["abertura","checkin-by-codigo"] }
+              }
+            },
+            {
               "name": "Resolver ponto pelo nome do computador (ferramenta Windows)",
               "description": "A ferramenta Windows chama este endpoint antes do checkin para descobrir o pontoId associado à máquina.",
               "event": [{ "listen": "test", "script": { "exec": [

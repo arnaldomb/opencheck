@@ -120,7 +120,7 @@ function buildMensagemEventoManual(opts: {
 
     case 'ABERTURA_AUSENTE':
       return buildMensagemCorporativa({
-        titulo: '🚨 *ALERTA DE ABERTURA FORA DO HORÁRIO*',
+        titulo: '🚨 *ALERTA DE FALTA DE ABERTURA*',
         introducao: 'Foi identificado atraso na abertura da unidade.',
         empresa,
         ponto,
@@ -190,16 +190,18 @@ export async function eventosRoutes(app: FastifyInstance) {
       take: Number(limit),
     })
 
-    // Batch-resolve vigilante names from meta.vigilanteId
-    const vigIds = [...new Set(
+    // Batch-resolve operator names from meta.vigilanteId or meta.operadorId
+    const opIds = [...new Set(
       eventos
-        .map(e => (e.meta as Record<string, string> | null)?.vigilanteId)
-        .filter(Boolean),
+        .flatMap(e => {
+          const meta = e.meta as Record<string, string> | null
+          return [meta?.vigilanteId, meta?.operadorId].filter(Boolean)
+        }),
     )] as string[]
 
-    const vigilantes = vigIds.length
+    const vigilantes = opIds.length
       ? await prisma.operador.findMany({
-          where: { id: { in: vigIds } },
+          where: { id: { in: opIds } },
           select: { id: true, nome: true },
         })
       : []
@@ -215,7 +217,7 @@ export async function eventosRoutes(app: FastifyInstance) {
 
     return eventos.map(e => {
       const metaObj   = e.meta as Record<string, unknown> | null
-      const vigId     = metaObj?.vigilanteId as string | undefined
+      const vigId     = (metaObj?.vigilanteId ?? metaObj?.operadorId) as string | undefined
       return {
         ...e,
         snapshot:    snapMap.get(e.id) ?? null,

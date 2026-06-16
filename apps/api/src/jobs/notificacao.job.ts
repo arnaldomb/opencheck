@@ -152,7 +152,7 @@ function buildMensagem(opts: {
 
     case 'ABERTURA_AUSENTE':
       return buildMensagemCorporativa({
-        titulo: '🚨 *ALERTA DE ABERTURA FORA DO HORÁRIO*',
+        titulo: '🚨 *ALERTA DE FALTA DE ABERTURA*',
         introducao: 'Foi identificado atraso na abertura da unidade.',
         empresa,
         ponto,
