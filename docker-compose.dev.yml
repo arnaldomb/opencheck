@@ -32,13 +32,32 @@ services:
       timeout: 3s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    container_name: opencheck_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── Migrate + Seed (one-shot) ─────────────────────────────────────────────
   migrate:
     build:
       context: .
       dockerfile: packages/database/Dockerfile.migrate
     container_name: opencheck_migrate
-    restart: no
+    restart: "no"
     environment:
       TZ: America/Sao_Paulo
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/opencheck
@@ -61,41 +80,59 @@ services:
       NODE_ENV: production
       PORT: 3001
       HOST: 0.0.0.0
-      APP_URL: https://opencheck.ggtronic.com.br
+      APP_URL: http://localhost:3000
+      API_URL: http://localhost:3001
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/opencheck
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: min-32-chars-here-xxxxxxxxxxxxxxx
-      JWT_REFRESH_SECRET: min-32-chars-here-yyyyyyy
+      JWT_SECRET: dev-jwt-secret-min-32-chars-here-xxxxx
+      JWT_REFRESH_SECRET: dev-jwt-refresh-secret-min-32-chars-yy
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
       ENCRYPTION_KEY: exactly-32-chars-for-aes256key!
-      EZVIZ_APP_KEY: ${EZVIZ_APP_KEY}
-      EZVIZ_APP_SECRET: ${EZVIZ_APP_SECRET}
+      # Pagamentos — sandbox desativado em dev local
+      ASAAS_API_KEY: dev_placeholder_key
+      ASAAS_SANDBOX: "true"
+      ASAAS_WEBHOOK_TOKEN: dev_webhook_token
+      # CTRL+SAFE
+      CTRLSAFE_API_URL: https://api.ctrlsafe.com.br/api/functions/v1
+      # EZVIZ — opcional em dev
+      EZVIZ_APP_KEY: ${EZVIZ_APP_KEY:-}
+      EZVIZ_APP_SECRET: ${EZVIZ_APP_SECRET:-}
       EZVIZ_REGION: ${EZVIZ_REGION:-br}
       EZVIZ_AUTH_URL: ${EZVIZ_AUTH_URL:-https://open.ezvizlife.com}
       EZVIZ_API_URL: ${EZVIZ_API_URL:-https://isaopen.ezvizlife.com}
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
+      # WhatsApp — opcional em dev
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
+      # E-mail — desativado em dev
+      SMTP_HOST: localhost
+      SMTP_PORT: "1025"
+      SMTP_USER: dev
+      SMTP_PASS: dev
+      EMAIL_FROM: dev@opencheck.local
+      # MinIO local
       MINIO_ENDPOINT: http://minio:9000
       MINIO_PUBLIC_URL: http://localhost:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: snapshots
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 15s
       timeout: 5s
-      start_period: 20s
+      start_period: 30s
       retries: 5
 
   # ── Frontend Next.js ──────────────────────────────────────────────────────
@@ -104,22 +141,22 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: https://api.opencheck.ggtronic.com.br
+        NEXT_PUBLIC_API_URL: http://localhost:3001
     container_name: opencheck_web
     restart: unless-stopped
     environment:
       NODE_ENV: production
       HOSTNAME: "0.0.0.0"
     ports:
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 30s
-      timeout: 5s
-      start_period: 15s
+      timeout: 10s
+      start_period: 30s
       retries: 3
 
   # ── Ferramentas de dev ────────────────────────────────────────────────────
@@ -136,25 +173,6 @@ services:
       postgres:
         condition: service_healthy
 
-  minio:
-    image: minio/minio:latest
-    container_name: opencheck_minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: opencheck_redis_commander
@@ -165,16 +183,6 @@ services:
       - "8081:8081"
     depends_on:
       redis:
-        condition: service_healthy
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: opencheck_cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    network_mode: host
-    depends_on:
-      api:
         condition: service_healthy
 
 volumes:
