@@ -157,7 +157,7 @@ export default function EventosPage() {
     try {
       const params = new URLSearchParams()
       if (filtroTipo)      params.set('tipo', filtroTipo)
-      if (filtroOperador) params.set('vigilanteId', filtroOperador)
+      if (filtroOperador) params.set('operadorId', filtroOperador)
       if (filtroDataInicio) {
         params.set('dataInicio', `${filtroDataInicio}T${filtroHoraInicio || '00:00'}:00`)
       }

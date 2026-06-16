@@ -101,14 +101,14 @@ export async function notificacoesRoutes(app: FastifyInstance) {
     })
   })
 
-  // ── PUT — CTRL+SAFE ───────────────────────────────────────────────────────
+  // ── PUT — CTRL+SAFE toggle ────────────────────────────────────────────────
   app.put('/ctrlsafe', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
-    const body = request.body as { ctrlsafeAgentToken: string; ctrlsafeInstallId: string }
+    const { ativo } = request.body as { ativo: boolean }
     return prisma.configNotificacao.upsert({
-      where: { tenantId_tipo: { tenantId, tipo: 'CTRLSAFE' } },
-      update: body,
-      create: { tenantId, tipo: 'CTRLSAFE', ...body },
+      where:  { tenantId_tipo: { tenantId, tipo: 'CTRLSAFE' } },
+      update: { ativo },
+      create: { tenantId, tipo: 'CTRLSAFE', ativo },
     })
   })
 

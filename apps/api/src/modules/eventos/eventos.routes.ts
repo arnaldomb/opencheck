@@ -166,7 +166,7 @@ export async function eventosRoutes(app: FastifyInstance) {
   app.get('/', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
     const {
-      tipo, pontoId, vigilanteId,
+      tipo, pontoId, operadorId,
       dataInicio, dataFim,
       page = '1', limit = '50',
     } = request.query as Record<string, string>
@@ -176,7 +176,7 @@ export async function eventosRoutes(app: FastifyInstance) {
         tenantId,
         ...(tipo ? { tipo: tipo as never } : {}),
         ...(pontoId ? { pontoId } : {}),
-        ...(vigilanteId ? { meta: { path: ['vigilanteId'], equals: vigilanteId } } : {}),
+        ...(operadorId ? { meta: { path: ['operadorId'], equals: operadorId } } : {}),
         ...((dataInicio || dataFim) ? {
           ocorridoEm: {
             ...(dataInicio ? { gte: new Date(dataInicio) } : {}),

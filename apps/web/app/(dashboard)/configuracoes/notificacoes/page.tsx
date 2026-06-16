@@ -76,7 +76,9 @@ export default function NotificacoesPage() {
   })
 
   // CTRL+SAFE
-  const [ctrlConfig,  setCtrlConfig]  = useState<CtrlConfig>({ alertarPorCtrlSafe: false })
+  const [ctrlConfig,    setCtrlConfig]    = useState<CtrlConfig>({ alertarPorCtrlSafe: false })
+  const [savingCtrl,    setSavingCtrl]    = useState(false)
+  const [okCtrl,        setOkCtrl]        = useState(false)
 
   // UI state
   const [loading,   setLoading]   = useState(true)
@@ -304,6 +306,23 @@ export default function NotificacoesPage() {
       setWppConfig(c => ({ ...c, whatsappGrupoJid: null, whatsappGrupoNome: null }))
     } catch (err) {
       setErro(String(err))
+    }
+  }
+
+  // ── salvar Monitoramento (CTRL+SAFE) ────────────────────────────────────────
+  async function salvarCtrlSafe() {
+    setSavingCtrl(true); setErro(''); setOkCtrl(false)
+    try {
+      await apiFetch('/config/notificacoes/ctrlsafe', {
+        method: 'PUT',
+        body: JSON.stringify({ ativo: ctrlConfig.alertarPorCtrlSafe }),
+      })
+      setOkCtrl(true)
+      setTimeout(() => setOkCtrl(false), 3000)
+    } catch (err) {
+      setErro(String(err))
+    } finally {
+      setSavingCtrl(false)
     }
   }
 
@@ -633,6 +652,23 @@ export default function NotificacoesPage() {
             <span>A licença CTRL+SAFE é ativada individualmente por ponto. Acesse <strong>Pontos → [ponto] → CTRL+SAFE</strong> para inserir a chave e ativar cada ponto.</span>
           </div>
         )}
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={salvarCtrlSafe}
+            disabled={savingCtrl}
+            className="btn-primary flex items-center gap-2 py-2 px-4 text-sm"
+          >
+            {savingCtrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {savingCtrl ? 'Salvando...' : 'Salvar Monitoramento'}
+          </button>
+          {okCtrl && (
+            <span className="flex items-center gap-1 text-sm text-green-600">
+              <CheckCircle2 className="h-4 w-4" /> Salvo!
+            </span>
+          )}
+        </div>
       </div>
 
     </div>
