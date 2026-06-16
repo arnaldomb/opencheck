@@ -142,6 +142,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      disable: true
     networks:
       - internal
       - proxy
