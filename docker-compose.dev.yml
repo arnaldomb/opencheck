@@ -63,7 +63,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/opencheck
       SUPERADMIN_EMAIL: admin@opencheck.com.br
       SUPERADMIN_SENHA: Admin@2024!
-      ENCRYPTION_KEY: exactly-32-chars-for-aes256key!
+      ENCRYPTION_KEY: dev-encryption-key-32chars-here!
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +88,7 @@ services:
       JWT_REFRESH_SECRET: dev-jwt-refresh-secret-min-32-chars-yy
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
-      ENCRYPTION_KEY: exactly-32-chars-for-aes256key!
+      ENCRYPTION_KEY: dev-encryption-key-32chars-here!
       # Pagamentos — sandbox desativado em dev local
       ASAAS_API_KEY: dev_placeholder_key
       ASAAS_SANDBOX: "true"
