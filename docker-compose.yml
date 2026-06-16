@@ -144,12 +144,14 @@ services:
       - "127.0.0.1:3000:3000"
     networks:
       - internal
+      - proxy
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.opencheck-web.rule=Host(`opencheck.ggtronic.com.br`)"
       - "traefik.http.routers.opencheck-web.entrypoints=websecure"
       - "traefik.http.routers.opencheck-web.tls.certresolver=letsencrypt"
-      - "traefik.http.services.opencheck-web.loadbalancer.server.url=http://127.0.0.1:3000"
+      - "traefik.http.services.opencheck-web.loadbalancer.server.port=3000"
 
 networks:
   internal:
