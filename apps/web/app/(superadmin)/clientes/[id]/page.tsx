@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle } from 'lucide-react'
+import { ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle, Camera } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Tenant {
   id: string; nome: string; email: string; cnpj?: string; telefone?: string; ativo: boolean; criadoEm: string
+  camerasHabilitadas: boolean
   assinatura?: {
     status: string; periodicidade: string; pontosContratados: number; trialAteEm?: string; proximaCobrancaEm?: string
     plano: { nome: string; valorMensal: number }
@@ -57,6 +58,16 @@ export default function ClienteDetailPage() {
       body: JSON.stringify({ ativo: !tenant.ativo }),
     })
     setTenant(t => t ? { ...t, ativo: !t.ativo } : t)
+  }
+
+  async function toggleCameras() {
+    if (!tenant) return
+    await fetch(`${API}/superadmin/clientes/${id}`, {
+      method: 'PUT',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ camerasHabilitadas: !tenant.camerasHabilitadas }),
+    })
+    setTenant(t => t ? { ...t, camerasHabilitadas: !t.camerasHabilitadas } : t)
   }
 
   if (loading) return (
@@ -163,6 +174,25 @@ export default function ClienteDetailPage() {
                   {tenant.ativo ? 'Ativo' : 'Inativo'}
                 </span>
               </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Funcionalidades</p>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+              <div className="flex items-center gap-3">
+                <Camera className="h-4 w-4 text-gray-400" />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Câmeras (EZVIZ)</p>
+                  <p className="text-xs text-gray-400">Vinculação de câmeras, aba Câmeras e integração EZVIZ</p>
+                </div>
+              </div>
+              <button
+                onClick={toggleCameras}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${tenant.camerasHabilitadas ? 'bg-ggtech-blue' : 'bg-gray-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tenant.camerasHabilitadas ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
             </div>
           </div>
         </div>

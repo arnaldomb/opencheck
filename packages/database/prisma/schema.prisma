@@ -48,8 +48,9 @@ model Tenant {
   cnpj         String?  @unique
   email        String   @unique
   telefone     String?
-  ativo        Boolean  @default(true)
-  onboardingOk Boolean  @default(false)
+  ativo               Boolean  @default(true)
+  onboardingOk        Boolean  @default(false)
+  camerasHabilitadas  Boolean  @default(true)
   criadoEm   DateTime @default(now())
 
   usuarios          Usuario[]

@@ -1,28 +1,37 @@
-import Link from 'next/link'
-import { Bell, Zap, Users, ChevronRight, Settings } from 'lucide-react'
+'use client'
 
-const ITEMS = [
+import Link from 'next/link'
+import { Bell, Zap, Users, ChevronRight } from 'lucide-react'
+import { useFeatures } from '@/lib/useFeatures'
+
+const ITEMS_BASE = [
   {
     href: '/configuracoes/notificacoes',
     icon: Bell,
     label: 'Notificações',
     desc: 'Configure WhatsApp e canais de alerta por ponto',
+    cameras: false,
   },
   {
     href: '/configuracoes/ezviz',
     icon: Zap,
     label: 'Integração EZVIZ',
     desc: 'Credenciais e configurações de câmeras EZVIZ',
+    cameras: true,
   },
   {
     href: '/configuracoes/usuarios',
     icon: Users,
     label: 'Usuários',
     desc: 'Gerencie usuários e permissões da sua empresa',
+    cameras: false,
   },
 ]
 
 export default function ConfiguracoesPage() {
+  const features = useFeatures()
+  const items = ITEMS_BASE.filter(i => !i.cameras || features.camerasHabilitadas)
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -31,7 +40,7 @@ export default function ConfiguracoesPage() {
       </div>
 
       <div className="card p-0 overflow-hidden divide-y divide-gray-100">
-        {ITEMS.map(item => {
+        {items.map(item => {
           const Icon = item.icon
           return (
             <Link

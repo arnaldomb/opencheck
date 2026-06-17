@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
+import { useFeatures } from '@/lib/useFeatures'
 import {
   MapPin, ArrowLeft, Save, Trash2, Loader2, Shield, Camera,
   Key, Copy, RefreshCw, Plus, Check, CheckCircle2, X, AlarmClock, Bell,
@@ -140,6 +141,7 @@ export default function PontoDetailPage() {
   const [operadores, setOperadores] = useState<Operador[]>([])
   const [cameras, setCameras]       = useState<Cam[]>([])
   const [loading, setLoading]       = useState(true)
+  const features = useFeatures()
   const [ctrlEnabled, setCtrlEnabled] = useState(false)
 
   const [saving, setSaving]         = useState(false)
@@ -163,6 +165,8 @@ export default function PontoDetailPage() {
   const [actErro, setActErro]   = useState('')
 
   const [form, setForm] = useState({ nome: '', descricao: '', endereco: '', latitude: '', longitude: '' })
+  const [buscandoGeo, setBuscandoGeo] = useState(false)
+  const [erroGeo, setErroGeo]         = useState('')
   const [ctrlForm, setCtrlForm] = useState({
     ctrlsafeAccount: '', ctrlsafePartition: '01',
     ctrlsafeZone: '099', ctrlsafeReceiver: '001', ctrlsafeLine: '01',
@@ -207,6 +211,24 @@ export default function PontoDetailPage() {
       setLoading(false)
     }).catch(() => { setLoading(false); setErro('Ponto não encontrado') })
   }, [id])
+
+  async function buscarCoordenadas() {
+    if (!form.endereco.trim()) return
+    setBuscandoGeo(true); setErroGeo('')
+    try {
+      const q = encodeURIComponent(form.endereco)
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
+        headers: { 'Accept-Language': 'pt-BR', 'User-Agent': 'OpenCheck/1.0' },
+      })
+      const data = await res.json() as { lat: string; lon: string; display_name: string }[]
+      if (!data.length) { setErroGeo('Endereço não encontrado. Tente ser mais específico.'); return }
+      setForm(f => ({ ...f, latitude: Number(data[0].lat).toFixed(6), longitude: Number(data[0].lon).toFixed(6) }))
+    } catch {
+      setErroGeo('Erro ao buscar coordenadas.')
+    } finally {
+      setBuscandoGeo(false)
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -369,14 +391,32 @@ export default function PontoDetailPage() {
             </div>
             <div className="sm:col-span-2">
               <label className="label">Endereço</label>
-              <input className="input" placeholder="Rua, número, cidade" value={form.endereco} onChange={e => set('endereco', e.target.value)} />
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1"
+                  placeholder="Rua, número, cidade, estado"
+                  value={form.endereco}
+                  onChange={e => set('endereco', e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), buscarCoordenadas())}
+                />
+                <button
+                  type="button"
+                  onClick={buscarCoordenadas}
+                  disabled={buscandoGeo || !form.endereco.trim()}
+                  className="btn-primary flex items-center gap-1.5 px-3 text-sm flex-shrink-0 disabled:opacity-50"
+                >
+                  {buscandoGeo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPin className="h-3.5 w-3.5" />}
+                  {buscandoGeo ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+              {erroGeo && <p className="text-xs text-red-500 mt-1">{erroGeo}</p>}
             </div>
             <div>
-              <label className="label">Latitude (opcional)</label>
+              <label className="label">Latitude</label>
               <input type="number" step="any" className="input" placeholder="-23.5505" value={form.latitude} onChange={e => set('latitude', e.target.value)} />
             </div>
             <div>
-              <label className="label">Longitude (opcional)</label>
+              <label className="label">Longitude</label>
               <input type="number" step="any" className="input" placeholder="-46.6333" value={form.longitude} onChange={e => set('longitude', e.target.value)} />
             </div>
             <div className="sm:col-span-2">
@@ -664,23 +704,25 @@ export default function PontoDetailPage() {
       </div>
 
       {/* Câmeras */}
-      <div className="card">
-        <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Camera className="h-5 w-5 text-ggtech-blue" /> Câmeras vinculadas
-        </h2>
-        {cameras.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhuma câmera vinculada a este ponto.</p>
-        ) : (
-          <div className="space-y-2">
-            {cameras.map(c => (
-              <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium text-gray-800">{c.deviceName ?? c.deviceSerial}</span>
-                <span className="text-xs font-mono text-gray-400">{c.deviceSerial}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {(features.camerasHabilitadas || cameras.length > 0) && (
+        <div className="card">
+          <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Camera className="h-5 w-5 text-ggtech-blue" /> Câmeras vinculadas
+          </h2>
+          {cameras.length === 0 ? (
+            <p className="text-sm text-gray-400">Nenhuma câmera vinculada a este ponto.</p>
+          ) : (
+            <div className="space-y-2">
+              {cameras.map(c => (
+                <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-800">{c.deviceName ?? c.deviceSerial}</span>
+                  <span className="text-xs font-mono text-gray-400">{c.deviceSerial}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -5,6 +5,16 @@ import { authMiddleware } from '../../middleware/auth.middleware.js'
 export async function configuracoesRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
+  // ── Feature flags do tenant ───────────────────────────────────────────────
+  app.get('/features', async (request) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { camerasHabilitadas: true },
+    })
+    return { camerasHabilitadas: tenant?.camerasHabilitadas ?? true }
+  })
+
   // ── Câmeras EZVIZ ──────────────────────────────────────────────────────────
 
   app.get('/cameras', async (request) => {
