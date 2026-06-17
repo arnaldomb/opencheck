@@ -13,17 +13,9 @@ export async function startJobs(): Promise<void> {
     }
   }, { connection: redisConnection })
 
-  // Worker de ciclo de alerta
-  const { cicloAlertaWorker } = await import('./ciclo-alerta.job.js')
-  cicloAlertaWorker()
-
   // Job de sync de assinaturas (a cada 6h)
   const { agendarSyncAssinaturas } = await import('./assinatura-sync.job.js')
   await agendarSyncAssinaturas()
-
-  // Job de verificação de agendas — inicia ciclos automaticamente (a cada 1 min)
-  const { agendarVerificacaoCiclos } = await import('./ciclo-agendamento.job.js')
-  await agendarVerificacaoCiclos()
 
   // Worker de notificações (WhatsApp via EvoGo)
   const { notificacaoWorker } = await import('./notificacao.job.js')
