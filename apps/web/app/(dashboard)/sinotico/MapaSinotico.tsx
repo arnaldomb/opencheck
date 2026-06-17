@@ -24,11 +24,11 @@ interface PontoSinotico {
 
 const STATUS_COLOR: Record<StatusSinotico, { fill: string; label: string }> = {
   ABERTA:              { fill: '#22c55e', label: 'Aberta' },
-  FECHADA:             { fill: '#94a3b8', label: 'Fechada' },
-  PENDENTE:            { fill: '#eab308', label: 'Aguardando abertura' },
+  FECHADA:             { fill: '#64748b', label: 'Fechada' },
+  PENDENTE:            { fill: '#f97316', label: 'Aguardando abertura' },
   AUSENTE:             { fill: '#ef4444', label: 'Não abriu' },
-  FECHAMENTO_PENDENTE: { fill: '#f97316', label: 'Fechamento pendente' },
-  SEM_CONFIGURACAO:    { fill: '#d1d5db', label: 'Sem configuração' },
+  FECHAMENTO_PENDENTE: { fill: '#dc2626', label: 'Fechamento pendente' },
+  SEM_CONFIGURACAO:    { fill: '#7c3aed', label: 'Sem configuração' },
 }
 
 function makeIcon(status: StatusSinotico, pulse: boolean) {
@@ -55,6 +55,15 @@ function makeIcon(status: StatusSinotico, pulse: boolean) {
 function fmt(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function MapResizer({ fullscreen }: { fullscreen: boolean }) {
+  const map = useMap()
+  useEffect(() => {
+    const t = setTimeout(() => map.invalidateSize(), 120)
+    return () => clearTimeout(t)
+  }, [fullscreen, map])
+  return null
 }
 
 function FitBounds({ pontos }: { pontos: PontoSinotico[] }) {
@@ -178,6 +187,7 @@ export default function MapaSinotico({ pontos }: Props) {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
+            <MapResizer fullscreen={fullscreen} />
             <FitBounds pontos={filtrados.length > 0 ? filtrados : comCoordenadas} />
             {filtrados.map(p => {
               const pulse = p.statusAtual === 'AUSENTE' || p.statusAtual === 'FECHAMENTO_PENDENTE'
