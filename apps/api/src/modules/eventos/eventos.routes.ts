@@ -190,22 +190,22 @@ export async function eventosRoutes(app: FastifyInstance) {
       take: Number(limit),
     })
 
-    // Batch-resolve operator names from meta.vigilanteId or meta.operadorId
+    // Batch-resolve operator names from meta.operadorId
     const opIds = [...new Set(
       eventos
         .flatMap(e => {
           const meta = e.meta as Record<string, string> | null
-          return [meta?.vigilanteId, meta?.operadorId].filter(Boolean)
+          return [meta?.operadorId].filter(Boolean)
         }),
     )] as string[]
 
-    const vigilantes = opIds.length
+    const operadores = opIds.length
       ? await prisma.operador.findMany({
           where: { id: { in: opIds } },
           select: { id: true, nome: true },
         })
       : []
-    const vigMap = new Map(vigilantes.map(v => [v.id, v.nome]))
+    const operadorMap = new Map(operadores.map(v => [v.id, v.nome]))
 
     // Batch-resolve snapshots
     const ids = eventos.map(e => e.id)
@@ -217,12 +217,12 @@ export async function eventosRoutes(app: FastifyInstance) {
 
     return eventos.map(e => {
       const metaObj   = e.meta as Record<string, unknown> | null
-      const vigId     = (metaObj?.vigilanteId ?? metaObj?.operadorId) as string | undefined
+      const operadorId = metaObj?.operadorId as string | undefined
       return {
         ...e,
-        snapshot:    snapMap.get(e.id) ?? null,
-        vigilante:   vigId ? { id: vigId, nome: vigMap.get(vigId) ?? null } : null,
-        monitorado:  e.monitorado,
+        snapshot:   snapMap.get(e.id) ?? null,
+        operador:   operadorId ? { id: operadorId, nome: operadorMap.get(operadorId) ?? null } : null,
+        monitorado: e.monitorado,
       }
     })
   })
@@ -300,7 +300,7 @@ export async function eventosRoutes(app: FastifyInstance) {
       prisma.tenant.findUnique({ where: { id: tenantId }, select: { nome: true } }),
       (async () => {
         const meta = (evento.meta as Record<string, unknown> | null) ?? {}
-        const operadorId = (meta.operadorId ?? meta.vigilanteId) as string | undefined
+        const operadorId = meta.operadorId as string | undefined
         if (!operadorId) return null
         const registro = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
         return registro?.nome ?? null

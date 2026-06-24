@@ -16,6 +16,7 @@ import { camerasRoutes } from './modules/cameras/cameras.routes.js'
 import { eventosRoutes } from './modules/eventos/eventos.routes.js'
 import { webhookRoutes } from './modules/webhooks/webhook.routes.js'
 import { operadoresRoutes } from './modules/operadores/operadores.routes.js'
+import { supervisoresRoutes } from './modules/supervisores/supervisores.routes.js'
 import { fieldApiRoutes } from './modules/field-api/field-api.routes.js'
 import { relatoriosRoutes } from './modules/relatorios/relatorios.routes.js'
 import { aberturaRoutes } from './modules/abertura/abertura.routes.js'
@@ -65,6 +66,7 @@ await app.register(configuracoesRoutes, { prefix: '/configuracoes' })
 await app.register(camerasRoutes, { prefix: '/cameras' })
 await app.register(eventosRoutes, { prefix: '/eventos' })
 await app.register(operadoresRoutes, { prefix: '/operadores' })
+await app.register(supervisoresRoutes, { prefix: '/supervisores' })
 await app.register(fieldApiRoutes, { prefix: '/api/field/v1' })
 await app.register(relatoriosRoutes, { prefix: '/relatorios' })
 await app.register(aberturaRoutes, { prefix: '/abertura' })

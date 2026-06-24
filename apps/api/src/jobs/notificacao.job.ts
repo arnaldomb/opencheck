@@ -225,7 +225,7 @@ export function notificacaoWorker(): void {
     // Resolve nome do operador a partir do meta do evento
     let nomeOperador: string | null = null
     const meta = evento?.meta as Record<string, unknown> | null
-    const operadorId = (meta?.operadorId ?? meta?.vigilanteId) as string | undefined
+    const operadorId = meta?.operadorId as string | undefined
     if (operadorId) {
       const op = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
       nomeOperador = op?.nome ?? null

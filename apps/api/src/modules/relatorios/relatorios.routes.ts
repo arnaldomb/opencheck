@@ -51,28 +51,28 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       }),
     ])
 
-    // Resolve operator names from meta.vigilanteId or meta.operadorId
+    // Resolve operator names from meta.operadorId
     const opIds = [...new Set(
       eventos.flatMap(e => {
         const meta = e.meta as Record<string, string> | null
-        return [meta?.vigilanteId, meta?.operadorId].filter(Boolean)
+        return [meta?.operadorId].filter(Boolean)
       })
     )] as string[]
-    const vigilantes = opIds.length
+    const operadores = opIds.length
       ? await prisma.operador.findMany({ where: { id: { in: opIds } }, select: { id: true, nome: true } })
       : []
-    const vigMap = new Map(vigilantes.map(v => [v.id, v.nome]))
+    const operadorMap = new Map(operadores.map(v => [v.id, v.nome]))
 
     const eventosFormatados = eventos.map(e => {
-      const meta        = e.meta as Record<string, string> | null
-      const resolvedId  = meta?.vigilanteId ?? meta?.operadorId
+      const meta       = e.meta as Record<string, string> | null
+      const operadorId = meta?.operadorId
       return {
         id:           e.id,
         tipo:         e.tipo,
         codigoEvento: meta?.codigoEvento ?? null,
         observacao:   meta?.observacao   ?? null,
         ponto:        e.ponto?.nome      ?? '—',
-        vigilante:    resolvedId ? (vigMap.get(resolvedId) ?? '—') : '—',
+        operador:     operadorId ? (operadorMap.get(operadorId) ?? '—') : '—',
         ocorridoEm:   e.ocorridoEm.toISOString(),
         encaminhado:  e.encaminhado,
         monitorado:   !!(meta?.monitorado),

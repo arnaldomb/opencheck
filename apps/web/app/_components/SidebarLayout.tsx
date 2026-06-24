@@ -7,7 +7,7 @@ import {
   LayoutDashboard, MapPin, Users, Bell, Camera,
   FileText, Settings, CreditCard, LogOut,
   Building2, DollarSign, Package, ChevronRight,
-  Shield, LayoutGrid,
+  Shield, LayoutGrid, ShieldCheck,
 } from 'lucide-react'
 import { useFeatures } from '@/lib/useFeatures'
 
@@ -16,6 +16,7 @@ const NAV_USER_BASE = [
   { href: '/sinotico',      label: 'Sinótico',       icon: LayoutGrid,      cameras: false },
   { href: '/pontos',        label: 'Pontos',         icon: MapPin,          cameras: false },
   { href: '/operadores',    label: 'Operadores',     icon: Users,           cameras: false },
+  { href: '/supervisores',  label: 'Supervisores',   icon: ShieldCheck,     cameras: false },
   { href: '/eventos',       label: 'Eventos',        icon: Bell,            cameras: false },
   { href: '/cameras',       label: 'Câmeras',        icon: Camera,          cameras: true  },
   { href: '/relatorios',    label: 'Relatórios',     icon: FileText,        cameras: false },

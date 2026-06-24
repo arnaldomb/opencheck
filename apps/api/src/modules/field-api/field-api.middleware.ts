@@ -5,7 +5,8 @@ export interface AgentContext {
   tenantId: string
   pontoId: string
   operadorId: string | null
-  tipo: 'PONTO' | 'OPERADOR'
+  supervisorId: string | null
+  tipo: 'PONTO' | 'OPERADOR' | 'SUPERVISOR'
 }
 
 declare module 'fastify' {
@@ -40,7 +41,7 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
     }
 
     await logAcesso('PONTO', ponto.id, ponto.tenantId, request)
-    request.agentCtx = { tenantId: ponto.tenantId, pontoId: ponto.id, operadorId: null, tipo: 'PONTO' }
+    request.agentCtx = { tenantId: ponto.tenantId, pontoId: ponto.id, operadorId: null, supervisorId: null, tipo: 'PONTO' }
     return
   }
 
@@ -73,7 +74,43 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
       tenantId: operador.tenantId,
       pontoId: operador.pontos[0].id,
       operadorId: operador.id,
+      supervisorId: null,
       tipo: 'OPERADOR',
+    }
+    return
+  }
+
+  // Try as supervisor key
+  const supervisor = await prisma.supervisor.findUnique({
+    where: { agentKey },
+    include: {
+      tenant: { select: { id: true, ativo: true, assinatura: { select: { status: true } } } },
+      pontos: { select: { id: true }, take: 1 },
+    },
+  })
+
+  if (supervisor) {
+    if (!supervisor.ativo) {
+      return reply.status(401).send({ erro: 'SUPERVISOR_INATIVO', mensagem: 'Supervisor desativado' })
+    }
+    if (!supervisor.tenant.ativo) {
+      return reply.status(401).send({ erro: 'TENANT_INATIVO', mensagem: 'Conta da empresa inativa' })
+    }
+    if (!supervisor.pontos[0]) {
+      return reply.status(401).send({ erro: 'SEM_PONTO', mensagem: 'Supervisor não vinculado a nenhum ponto' })
+    }
+    const statusAss = supervisor.tenant.assinatura?.status
+    if (statusAss === 'CANCELADA' || statusAss === 'SUSPENSA') {
+      return reply.status(401).send({ erro: 'ASSINATURA_CANCELADA', mensagem: 'Assinatura cancelada. Contate o administrador.' })
+    }
+
+    await logAcesso('SUPERVISOR', supervisor.id, supervisor.tenantId, request)
+    request.agentCtx = {
+      tenantId: supervisor.tenantId,
+      pontoId: supervisor.pontos[0].id,
+      operadorId: null,
+      supervisorId: supervisor.id,
+      tipo: 'SUPERVISOR',
     }
     return
   }
@@ -81,7 +118,7 @@ export async function agentKeyMiddleware(request: FastifyRequest, reply: Fastify
   return reply.status(401).send({ erro: 'AGENT_KEY_INVALIDA', mensagem: 'Chave não encontrada' })
 }
 
-async function logAcesso(tipo: 'PONTO' | 'OPERADOR', referenciaId: string, tenantId: string, request: FastifyRequest) {
+async function logAcesso(tipo: 'PONTO' | 'OPERADOR' | 'SUPERVISOR', referenciaId: string, tenantId: string, request: FastifyRequest) {
   const acao = `${request.method}:${request.url.split('?')[0]}`
   await prisma.agentKeyLog.create({
     data: {

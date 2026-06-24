@@ -927,14 +927,14 @@
 
     {
       "name": "🖥️ Field API — Ferramenta Windows (x-agent-key)",
-      "description": "Endpoints usados pela ferramenta Windows OpenCheck.\n\nA ferramenta Windows pode usar dois modos de autenticação:\n- JWT Bearer: operador faz login uma vez, token salvo localmente\n- x-agent-key: chave do ponto para operações sem login do usuário\n\nFluxo recomendado para a ferramenta Windows:\n1. Na instalação: POST /auth/login → salva JWT localmente\n2. Ao iniciar: GET /abertura/ponto-por-maquina → resolve pontoId pelo nome do PC\n3. Ao CTRL+SHIFT+A: POST /abertura/checkin com JWT + nomeComputador\n4. Polling de config: GET /api/field/v1/config (mantido para compatibilidade)",
+      "description": "Endpoints usados pela ferramenta Windows OpenCheck.\n\nA ferramenta Windows pode usar dois modos de autenticação:\n- JWT Bearer: operador faz login uma vez, token salvo localmente\n- x-agent-key: chave do ponto para operações sem login do usuário\n\nFluxo recomendado para a ferramenta Windows:\n1. Na instalação: POST /auth/login → salva JWT localmente\n2. Ao iniciar: GET /abertura/ponto-por-maquina → resolve pontoId pelo nome do PC\n3. Ao carregar configuração: GET /api/field/v1/config para obter operador, abertura e fechamento da loja\n4. Ao abrir a loja: POST /api/field/v1/abertura/checkin\n5. Ao fechar a loja: POST /api/field/v1/abertura/fechamento",
       "item": [
         {
-          "name": "Config completa do ponto (inicialização)",
+          "name": "Config do ponto (abertura e fechamento)",
           "event": [{ "listen": "test", "script": { "exec": [
             "var json = pm.response.json();",
             "if (json.agentKeyPonto) { pm.collectionVariables.set('agentKeyPonto', json.agentKeyPonto); }",
-            "if (json.operadorId)    { pm.collectionVariables.set('operadorId',    json.operadorId); }",
+            "if (json.operadorAtual && json.operadorAtual.id) { pm.collectionVariables.set('operadorId', json.operadorAtual.id); }",
             "pm.test('Config OK', () => pm.response.to.have.status(200));"
           ], "type": "text/javascript" } }],
           "request": {
@@ -967,8 +967,8 @@
           }
         },
         {
-          "name": "Check-in ciclo (legado — requer ciclo ativo)",
-          "description": "Endpoint legado do sistema de ciclos. Retorna CICLO_INATIVO se não houver ExecucaoCiclo ativa. Use /abertura/checkin para o fluxo atual.",
+          "name": "Check-in do ciclo antigo (não usar)",
+          "description": "Endpoint antigo do sistema de ciclos. O fluxo atual da ferramenta Windows usa abertura e fechamento da loja.",
           "request": {
             "method": "POST",
             "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],

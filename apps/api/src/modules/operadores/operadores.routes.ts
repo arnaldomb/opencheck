@@ -28,7 +28,7 @@ export async function operadoresRoutes(app: FastifyInstance) {
       },
       orderBy: { criadoEm: 'desc' },
     })
-    return vigs.map(v => ({ ...v, vigilanteId: v.codigo ?? v.id }))
+    return vigs
   })
 
   app.post('/', async (request, reply) => {

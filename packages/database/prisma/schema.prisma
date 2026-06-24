@@ -53,17 +53,19 @@ model Tenant {
   camerasHabilitadas  Boolean  @default(true)
   criadoEm   DateTime @default(now())
 
-  usuarios          Usuario[]
-  pontos            Ponto[]
-  cameras           Camera[]
-  operadores        Operador[]
-  assinatura        Assinatura?
-  eventos           Evento[]
-  ciclos            ConfigCiclo[]
-  notifConfigs      ConfigNotificacao[]
-  onboarding        OnboardingStep?
-  configsAbertura   ConfigAbertura[]
-  registrosAbertura RegistroAbertura[]
+  usuarios              Usuario[]
+  pontos                Ponto[]
+  cameras               Camera[]
+  operadores            Operador[]
+  supervisores          Supervisor[]
+  assinatura            Assinatura?
+  eventos               Evento[]
+  ciclos                ConfigCiclo[]
+  notifConfigs          ConfigNotificacao[]
+  onboarding            OnboardingStep?
+  configsAbertura       ConfigAbertura[]
+  registrosAbertura     RegistroAbertura[]
+  registrosSupervisor   RegistroSupervisor[]
 }
 
 model Usuario {
@@ -150,14 +152,16 @@ model Ponto {
   agentKey   String?  @unique
   agentKeyAt DateTime?
 
-  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  operadores      Operador[]         @relation("OperadorPontos")
-  cameras         Camera[]
-  eventos         Evento[]
-  configCiclo     ConfigCiclo?
-  execucoes       ExecucaoCiclo[]
-  configAbertura  ConfigAbertura?
-  registrosAbertura RegistroAbertura[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  operadores          Operador[]           @relation("OperadorPontos")
+  supervisores        Supervisor[]         @relation("SupervisorPontos")
+  cameras             Camera[]
+  eventos             Evento[]
+  configCiclo         ConfigCiclo?
+  execucoes           ExecucaoCiclo[]
+  configAbertura      ConfigAbertura?
+  registrosAbertura   RegistroAbertura[]
+  registrosSupervisor RegistroSupervisor[]
 }
 
 // ─────────────────────────────────────
@@ -183,6 +187,46 @@ model Operador {
   registrosFechamento RegistroAbertura[] @relation("OperadorFechamento")
 
   @@unique([tenantId, codigo])
+}
+
+// ─────────────────────────────────────
+// SUPERVISORES
+// ─────────────────────────────────────
+
+model Supervisor {
+  id         String    @id @default(cuid())
+  tenantId   String
+  nome       String
+  telefone   String?
+  codigo     String?
+  ativo      Boolean   @default(true)
+  criadoEm  DateTime  @default(now())
+
+  agentKey   String?   @unique
+  agentKeyAt DateTime?
+
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pontos               Ponto[]              @relation("SupervisorPontos")
+  registros            RegistroSupervisor[]
+  registrosAbertura    RegistroAbertura[]   @relation("SupervisorAbertura")
+  registrosFechamento  RegistroAbertura[]   @relation("SupervisorFechamento")
+
+  @@unique([tenantId, codigo])
+}
+
+model RegistroSupervisor {
+  id           String                 @id @default(cuid())
+  supervisorId String
+  pontoId      String
+  tenantId     String
+  tipo         TipoRegistroSupervisor
+  registradoEm DateTime              @default(now())
+  ip           String?
+  userAgent    String?
+
+  supervisor Supervisor @relation(fields: [supervisorId], references: [id])
+  ponto      Ponto      @relation(fields: [pontoId], references: [id])
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
 }
 
 // ─────────────────────────────────────
@@ -235,6 +279,7 @@ model RegistroAbertura {
   deadlineEm     DateTime
   abertaEm       DateTime?
   operadorId     String?
+  supervisorId   String?
   nomeComputador String?
   usuarioWindows String?
   jobId          String?
@@ -243,17 +288,20 @@ model RegistroAbertura {
   statusFechamento            StatusFechamento?
   fechamentoEm                DateTime?
   fechamentoOperadorId        String?
+  fechamentoSupervisorId      String?
   fechamentoJobId             String?
 
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt
 
-  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ponto              Ponto           @relation(fields: [pontoId], references: [id])
-  config             ConfigAbertura  @relation(fields: [configId], references: [id])
-  turno              TurnoAbertura?  @relation(fields: [turnoId], references: [id])
-  operador           Operador?       @relation("OperadorAbertura",   fields: [operadorId],           references: [id])
-  fechamentoOperador Operador?       @relation("OperadorFechamento", fields: [fechamentoOperadorId], references: [id])
+  tenant                Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ponto                 Ponto           @relation(fields: [pontoId], references: [id])
+  config                ConfigAbertura  @relation(fields: [configId], references: [id])
+  turno                 TurnoAbertura?  @relation(fields: [turnoId], references: [id])
+  operador              Operador?       @relation("OperadorAbertura",    fields: [operadorId],              references: [id])
+  fechamentoOperador    Operador?       @relation("OperadorFechamento",  fields: [fechamentoOperadorId],    references: [id])
+  supervisor            Supervisor?     @relation("SupervisorAbertura",  fields: [supervisorId],            references: [id])
+  fechamentoSupervisor  Supervisor?     @relation("SupervisorFechamento",fields: [fechamentoSupervisorId],  references: [id])
 
   @@unique([pontoId, data])
 }
@@ -506,6 +554,8 @@ enum TipoEvento {
   ABERTURA_AUSENTE
   FECHAMENTO_CHECKIN
   FECHAMENTO_AUSENTE
+  SUPERVISOR_ENTRADA
+  SUPERVISOR_SAIDA
   PANICO
   PANICO_SILENCIOSO
   COACAO
@@ -513,6 +563,11 @@ enum TipoEvento {
   AVISO
   RESTAURACAO
   TESTE
+}
+
+enum TipoRegistroSupervisor {
+  ENTRADA
+  SAIDA
 }
 
 enum StatusFechamento {
@@ -525,6 +580,7 @@ enum StatusFechamento {
 enum AgentKeyTipo {
   PONTO
   OPERADOR
+  SUPERVISOR
 }
 
 enum StatusAbertura {

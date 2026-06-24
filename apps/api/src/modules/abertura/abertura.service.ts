@@ -187,7 +187,7 @@ export async function reagendarFechamentosHoje(): Promise<void> {
 export async function registrarCheckin(
   tenantId: string,
   pontoId: string,
-  opts: { operadorId?: string; nomeComputador?: string; usuarioWindows?: string },
+  opts: { operadorId?: string; supervisorId?: string; nomeComputador?: string; usuarioWindows?: string },
 ) {
   const config = await prisma.configAbertura.findUnique({
     where: { pontoId },
@@ -225,7 +225,8 @@ export async function registrarCheckin(
     abertaEm: agora,
     status,
     turnoId:        turno.id,
-    operadorId:     opts.operadorId ?? null,
+    operadorId:     opts.operadorId   ?? null,
+    supervisorId:   opts.supervisorId ?? null,
     nomeComputador: opts.nomeComputador ?? null,
     usuarioWindows: opts.usuarioWindows ?? null,
   }
@@ -262,7 +263,8 @@ export async function registrarCheckin(
         registroAberturaId: registro.id,
         statusAbertura: status,
         codigoEvento,
-        operadorId: opts.operadorId ?? null,
+        operadorId:     opts.operadorId   ?? null,
+        supervisorId:   opts.supervisorId ?? null,
         nomeComputador: opts.nomeComputador ?? null,
         usuarioWindows: opts.usuarioWindows ?? null,
       },
@@ -286,7 +288,7 @@ export async function registrarCheckin(
 export async function registrarFechamento(
   tenantId: string,
   pontoId: string,
-  opts: { operadorId?: string; nomeComputador?: string; usuarioWindows?: string },
+  opts: { operadorId?: string; supervisorId?: string; nomeComputador?: string; usuarioWindows?: string },
 ) {
   const config = await prisma.configAbertura.findUnique({
     where: { pontoId },
@@ -328,10 +330,11 @@ export async function registrarFechamento(
   const registro = await prisma.registroAbertura.update({
     where: { id: existing.id },
     data: {
-      fechamentoEm:         agora,
+      fechamentoEm:           agora,
       statusFechamento,
-      fechamentoOperadorId: opts.operadorId ?? null,
-      fechamentoJobId:      null,
+      fechamentoOperadorId:   opts.operadorId   ?? null,
+      fechamentoSupervisorId: opts.supervisorId ?? null,
+      fechamentoJobId:        null,
     },
   })
 
@@ -342,7 +345,8 @@ export async function registrarFechamento(
       meta: {
         registroAberturaId: registro.id,
         statusFechamento,
-        operadorId: opts.operadorId ?? null,
+        operadorId:     opts.operadorId   ?? null,
+        supervisorId:   opts.supervisorId ?? null,
         nomeComputador: opts.nomeComputador ?? null,
         usuarioWindows: opts.usuarioWindows ?? null,
       },
@@ -470,8 +474,10 @@ export async function getSinotico(tenantId: string) {
     prisma.registroAbertura.findMany({
       where: { tenantId, data: hoje },
       include: {
-        operador:           { select: { nome: true } },
-        fechamentoOperador: { select: { nome: true } },
+        operador:              { select: { nome: true } },
+        fechamentoOperador:    { select: { nome: true } },
+        supervisor:            { select: { nome: true } },
+        fechamentoSupervisor:  { select: { nome: true } },
       },
     }),
   ])
@@ -498,11 +504,11 @@ export async function getSinotico(tenantId: string) {
       horaFechamento: turno?.horaFechamento ?? null,
       checkinFechamentoObrigatorio: turno?.checkinFechamentoObrigatorio ?? false,
       statusAtual,
-      abertaEm:             reg?.abertaEm    ?? null,
-      operadorAbertura:     reg?.operador?.nome ?? null,
-      fechamentoEm:         reg?.fechamentoEm   ?? null,
-      operadorFechamento:   reg?.fechamentoOperador?.nome ?? null,
-      statusFechamento:     reg?.statusFechamento ?? null,
+      abertaEm:              reg?.abertaEm    ?? null,
+      operadorAbertura:      reg?.operador?.nome          ?? reg?.supervisor?.nome          ?? null,
+      fechamentoEm:          reg?.fechamentoEm   ?? null,
+      operadorFechamento:    reg?.fechamentoOperador?.nome ?? reg?.fechamentoSupervisor?.nome ?? null,
+      statusFechamento:      reg?.statusFechamento ?? null,
     }
   })
 }
