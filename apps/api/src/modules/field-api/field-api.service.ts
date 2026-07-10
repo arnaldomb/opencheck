@@ -605,19 +605,35 @@ async function iniciarCiclo(
 
 // ─── Supervisor ───────────────────────────────────────────────────────────────
 
-export async function registrarEntradaSupervisor(ctx: AgentContext) {
-  const { tenantId, pontoId, supervisorId } = ctx
+interface RegistroSupervisorOpts {
+  pontoId?: string
+  ip?: string
+  userAgent?: string
+}
+
+async function registrarMovimentoSupervisor(
+  ctx: AgentContext,
+  tipo: 'ENTRADA' | 'SAIDA',
+  opts: RegistroSupervisorOpts,
+) {
+  const { tenantId, supervisorId } = ctx
   if (!supervisorId) throw new Error('supervisorId ausente no contexto')
+  const pontoId = opts.pontoId ?? ctx.pontoId
 
   const registro = await prisma.registroSupervisor.create({
-    data: { supervisorId, pontoId, tenantId, tipo: 'ENTRADA', ip: null, userAgent: null },
+    data: {
+      supervisorId, pontoId, tenantId, tipo,
+      ip:        opts.ip ?? null,
+      userAgent: opts.userAgent ?? null,
+    },
+    include: { supervisor: { select: { id: true, nome: true } } },
   })
 
   await prisma.evento.create({
     data: {
       tenantId,
       pontoId,
-      tipo: 'SUPERVISOR_ENTRADA',
+      tipo: tipo === 'ENTRADA' ? 'SUPERVISOR_ENTRADA' : 'SUPERVISOR_SAIDA',
       meta: { supervisorId, registroId: registro.id },
     },
   })
@@ -625,22 +641,10 @@ export async function registrarEntradaSupervisor(ctx: AgentContext) {
   return registro
 }
 
-export async function registrarSaidaSupervisor(ctx: AgentContext) {
-  const { tenantId, pontoId, supervisorId } = ctx
-  if (!supervisorId) throw new Error('supervisorId ausente no contexto')
+export async function registrarEntradaSupervisor(ctx: AgentContext, opts: RegistroSupervisorOpts = {}) {
+  return registrarMovimentoSupervisor(ctx, 'ENTRADA', opts)
+}
 
-  const registro = await prisma.registroSupervisor.create({
-    data: { supervisorId, pontoId, tenantId, tipo: 'SAIDA', ip: null, userAgent: null },
-  })
-
-  await prisma.evento.create({
-    data: {
-      tenantId,
-      pontoId,
-      tipo: 'SUPERVISOR_SAIDA',
-      meta: { supervisorId, registroId: registro.id },
-    },
-  })
-
-  return registro
+export async function registrarSaidaSupervisor(ctx: AgentContext, opts: RegistroSupervisorOpts = {}) {
+  return registrarMovimentoSupervisor(ctx, 'SAIDA', opts)
 }
