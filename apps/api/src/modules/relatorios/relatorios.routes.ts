@@ -137,10 +137,12 @@ export async function relatoriosRoutes(app: FastifyInstance) {
           data: { gte: dataInicio, lte: dataFim },
         },
         include: {
-          ponto:    { select: { nome: true } },
-          turno:    { select: { horaAbertura: true, horaFechamento: true } },
-          operador: { select: { nome: true } },
-          fechamentoOperador: { select: { nome: true } },
+          ponto:      { select: { nome: true } },
+          turno:      { select: { horaAbertura: true, horaFechamento: true } },
+          operador:   { select: { nome: true } },
+          supervisor: { select: { nome: true } },
+          fechamentoOperador:   { select: { nome: true } },
+          fechamentoSupervisor: { select: { nome: true } },
         },
         orderBy: [{ data: 'asc' }, { ponto: { nome: 'asc' } }],
       }),
@@ -168,7 +170,11 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       statusFechamento:     r.statusFechamento ? (STATUS_FECHAMENTO_PT[r.statusFechamento] ?? r.statusFechamento) : (r.turno?.horaFechamento ? 'Aguardando Fechamento' : '—'),
       horaFechamentoConfig: r.turno?.horaFechamento ?? null,
       horaFechamentoReal:   r.fechamentoEm?.toISOString() ?? null,
-      operador:             r.operador?.nome ?? r.fechamentoOperador?.nome ?? '—',
+      operador:             r.operador?.nome
+                              ?? (r.supervisor ? `${r.supervisor.nome} (Supervisor)` : null)
+                              ?? r.fechamentoOperador?.nome
+                              ?? (r.fechamentoSupervisor ? `${r.fechamentoSupervisor.nome} (Supervisor)` : null)
+                              ?? '—',
     }))
 
     const totalLinhas = linhas.length

@@ -533,10 +533,12 @@ export async function getHistorico(
     prisma.registroAbertura.findMany({
       where,
       include: {
-        ponto:              { select: { nome: true } },
-        operador:           { select: { nome: true } },
-        fechamentoOperador: { select: { nome: true } },
-        turno:              { select: { horaAbertura: true, horaFechamento: true, diasSemana: true } },
+        ponto:                { select: { nome: true } },
+        operador:             { select: { nome: true } },
+        supervisor:           { select: { nome: true } },
+        fechamentoOperador:   { select: { nome: true } },
+        fechamentoSupervisor: { select: { nome: true } },
+        turno:                { select: { horaAbertura: true, horaFechamento: true, diasSemana: true } },
       },
       orderBy: { data: 'desc' },
       skip:  (opts.page - 1) * opts.limit,
