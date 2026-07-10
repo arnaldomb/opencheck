@@ -190,7 +190,7 @@ export async function eventosRoutes(app: FastifyInstance) {
       take: Number(limit),
     })
 
-    // Batch-resolve operator names from meta.operadorId
+    // Batch-resolve nomes de operadores e supervisores a partir do meta
     const opIds = [...new Set(
       eventos
         .flatMap(e => {
@@ -198,14 +198,24 @@ export async function eventosRoutes(app: FastifyInstance) {
           return [meta?.operadorId].filter(Boolean)
         }),
     )] as string[]
+    const supIds = [...new Set(
+      eventos
+        .flatMap(e => {
+          const meta = e.meta as Record<string, string> | null
+          return [meta?.supervisorId].filter(Boolean)
+        }),
+    )] as string[]
 
-    const operadores = opIds.length
-      ? await prisma.operador.findMany({
-          where: { id: { in: opIds } },
-          select: { id: true, nome: true },
-        })
-      : []
-    const operadorMap = new Map(operadores.map(v => [v.id, v.nome]))
+    const [operadores, supervisores] = await Promise.all([
+      opIds.length
+        ? prisma.operador.findMany({ where: { id: { in: opIds } }, select: { id: true, nome: true } })
+        : [],
+      supIds.length
+        ? prisma.supervisor.findMany({ where: { id: { in: supIds } }, select: { id: true, nome: true } })
+        : [],
+    ])
+    const operadorMap   = new Map(operadores.map(v => [v.id, v.nome]))
+    const supervisorMap = new Map(supervisores.map(s => [s.id, s.nome]))
 
     // Batch-resolve snapshots
     const ids = eventos.map(e => e.id)
@@ -216,12 +226,22 @@ export async function eventosRoutes(app: FastifyInstance) {
     const snapMap = new Map(snapshots.map(s => [s.eventoId, { id: s.id, imageUrl: s.imageUrl }]))
 
     return eventos.map(e => {
-      const metaObj   = e.meta as Record<string, unknown> | null
-      const operadorId = metaObj?.operadorId as string | undefined
+      const metaObj      = e.meta as Record<string, unknown> | null
+      const operadorId   = metaObj?.operadorId as string | undefined
+      const supervisorId = metaObj?.supervisorId as string | undefined
+
+      // Quem agiu no evento: operador ou supervisor (campo único para a UI)
+      let ator: { id: string; nome: string | null; tipo: 'OPERADOR' | 'SUPERVISOR' } | null = null
+      if (operadorId) {
+        ator = { id: operadorId, nome: operadorMap.get(operadorId) ?? null, tipo: 'OPERADOR' }
+      } else if (supervisorId) {
+        ator = { id: supervisorId, nome: supervisorMap.get(supervisorId) ?? null, tipo: 'SUPERVISOR' }
+      }
+
       return {
         ...e,
         snapshot:   snapMap.get(e.id) ?? null,
-        operador:   operadorId ? { id: operadorId, nome: operadorMap.get(operadorId) ?? null } : null,
+        operador:   ator,
         monitorado: e.monitorado,
       }
     })
@@ -300,10 +320,17 @@ export async function eventosRoutes(app: FastifyInstance) {
       prisma.tenant.findUnique({ where: { id: tenantId }, select: { nome: true } }),
       (async () => {
         const meta = (evento.meta as Record<string, unknown> | null) ?? {}
-        const operadorId = meta.operadorId as string | undefined
-        if (!operadorId) return null
-        const registro = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
-        return registro?.nome ?? null
+        const operadorId   = meta.operadorId as string | undefined
+        const supervisorId = meta.supervisorId as string | undefined
+        if (operadorId) {
+          const registro = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
+          return registro?.nome ?? null
+        }
+        if (supervisorId) {
+          const registro = await prisma.supervisor.findUnique({ where: { id: supervisorId }, select: { nome: true } })
+          return registro ? `${registro.nome} (Supervisor)` : null
+        }
+        return null
       })(),
     ])
 

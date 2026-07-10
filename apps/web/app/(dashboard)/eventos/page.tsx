@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 interface Snapshot  { id: string; imageUrl: string }
-interface Operador { id: string; nome: string | null }
+interface Ator { id: string; nome: string | null; tipo?: 'OPERADOR' | 'SUPERVISOR' }
 interface StreamData { hls: string | null; rtmp: string | null; expireTime?: string }
 
 interface Evento {
@@ -18,8 +18,8 @@ interface Evento {
   monitorado:  boolean
   pontoId?:    string
   ponto?:      { nome: string }
-  vigilante?:  Operador | null
-  meta?:       { vigilanteId?: string; codigoEvento?: string; observacao?: string }
+  operador?:   Ator | null
+  meta?:       { operadorId?: string; supervisorId?: string; codigoEvento?: string; observacao?: string }
   snapshot:    Snapshot | null
 }
 
@@ -33,6 +33,8 @@ const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: strin
   PANICO:            { label: 'Pânico',             badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: AlertTriangle },
   PANICO_SILENCIOSO: { label: 'Pânico silencioso',  badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: Shield },
   COACAO:            { label: 'Coação',             badgeCls: 'bg-purple-100 text-purple-700', iconCls: 'text-purple-600', icon: Shield },
+  SUPERVISOR_ENTRADA:{ label: 'Ronda — Entrada',    badgeCls: 'bg-indigo-100 text-indigo-700', iconCls: 'text-indigo-500', icon: Shield },
+  SUPERVISOR_SAIDA:  { label: 'Ronda — Saída',      badgeCls: 'bg-indigo-50 text-indigo-500',  iconCls: 'text-indigo-400', icon: Shield },
   AVISO:             { label: 'Aviso',              badgeCls: 'bg-yellow-100 text-yellow-700', iconCls: 'text-yellow-500', icon: Bell },
   RESTAURACAO:       { label: 'Restauração',        badgeCls: 'bg-gray-100 text-gray-600',     iconCls: 'text-gray-400',   icon: RefreshCw },
   TESTE:             { label: 'Teste',              badgeCls: 'bg-gray-100 text-gray-500',     iconCls: 'text-gray-300',   icon: Wrench },
@@ -332,12 +334,17 @@ export default function EventosPage() {
                       }
                     </div>
 
-                    {/* Operador */}
+                    {/* Operador / Supervisor */}
                     <div className="min-w-0 flex items-center gap-1.5">
-                      {ev.vigilante?.nome ? (
+                      {ev.operador?.nome ? (
                         <>
                           <User className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
-                          <span className="text-sm text-gray-600 truncate">{ev.vigilante.nome}</span>
+                          <span className="text-sm text-gray-600 truncate">{ev.operador.nome}</span>
+                          {ev.operador.tipo === 'SUPERVISOR' && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-600 flex-shrink-0">
+                              Supervisor
+                            </span>
+                          )}
                         </>
                       ) : (
                         <span className="text-xs text-gray-300">—</span>
