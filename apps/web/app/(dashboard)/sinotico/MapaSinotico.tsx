@@ -178,10 +178,13 @@ export default function MapaSinotico({ pontos }: Props) {
             {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
 
+          {/* Wrapper controla a altura: props do MapContainer são imutáveis após
+              a montagem, então mudar style nele não teria efeito no fullscreen */}
+          <div style={{ height: fullscreen ? '100vh' : '520px' }}>
           <MapContainer
             center={defaultCenter}
             zoom={5}
-            style={{ height: fullscreen ? '100vh' : '520px', zIndex: 0 }}
+            style={{ height: '100%', width: '100%', zIndex: 0 }}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -223,6 +226,7 @@ export default function MapaSinotico({ pontos }: Props) {
               )
             })}
           </MapContainer>
+          </div>
         </div>
       )}
 
