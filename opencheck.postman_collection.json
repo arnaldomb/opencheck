@@ -19,7 +19,10 @@
     { "key": "configAberturaId", "value": "",                                       "type": "string", "description": "ID da ConfigAbertura do ponto" },
     { "key": "agentKeyPonto", "value": "oc_tst_PONTO1PO",                            "type": "string", "description": "agentKey do ponto (seed: oc_tst_PONTO1PO … oc_tst_PONTO4EN)" },
     { "key": "eventoId",      "value": "",                                          "type": "string", "description": "Preenchido ao listar eventos" },
-    { "key": "nomeComputador","value": "DESKTOP-LOJA01",                            "type": "string", "description": "Nome da máquina (enviado pela ferramenta Windows)" }
+    { "key": "nomeComputador","value": "DESKTOP-LOJA01",                            "type": "string", "description": "Nome da máquina (enviado pela ferramenta Windows)" },
+    { "key": "supervisorId",  "value": "",                                          "type": "string", "description": "Preenchido ao criar supervisor" },
+    { "key": "agentKeySup",   "value": "",                                          "type": "string", "description": "agentKey do supervisor (preenchido ao criar/regenerar)" },
+    { "key": "agentKeyOp",    "value": "",                                          "type": "string", "description": "agentKey do operador (preenchido ao regenerar)" }
   ],
   "item": [
 
@@ -259,6 +262,130 @@
     },
 
     {
+      "name": "🕵️ Supervisores",
+      "description": "Supervisores fazem rondas nos pontos (entrada/saída) e também podem registrar check-in de abertura/fechamento com seu código ou chave.\n\nAs listagens retornam agentKey MASCARADA (oc_live_…abc4); a chave completa só é exibida na criação e na regeneração.",
+      "item": [
+        {
+          "name": "Listar supervisores",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/supervisores", "host": ["{{baseUrl}}"], "path": ["supervisores"] }
+          }
+        },
+        {
+          "name": "Criar supervisor",
+          "description": "Gera automaticamente código de 4 dígitos (único entre operadores E supervisores do tenant) e agentKey. A resposta desta chamada é o único momento em que a chave completa é exibida.",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('supervisorId', json.id); }",
+            "if (json.agentKey) { pm.collectionVariables.set('agentKeySup', json.agentKey); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Carlos Supervisor\",\n  \"telefone\": \"+55 11 98888-7777\"\n}" },
+            "url": { "raw": "{{baseUrl}}/supervisores", "host": ["{{baseUrl}}"], "path": ["supervisores"] }
+          }
+        },
+        {
+          "name": "Buscar supervisor",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/supervisores/{{supervisorId}}", "host": ["{{baseUrl}}"], "path": ["supervisores","{{supervisorId}}"] }
+          }
+        },
+        {
+          "name": "Atualizar supervisor",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Carlos Supervisor\",\n  \"telefone\": \"+55 11 97777-6666\"\n}" },
+            "url": { "raw": "{{baseUrl}}/supervisores/{{supervisorId}}", "host": ["{{baseUrl}}"], "path": ["supervisores","{{supervisorId}}"] }
+          }
+        },
+        {
+          "name": "Desativar supervisor",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/supervisores/{{supervisorId}}", "host": ["{{baseUrl}}"], "path": ["supervisores","{{supervisorId}}"] }
+          }
+        },
+        {
+          "name": "Vincular pontos ao supervisor",
+          "description": "Substitui o conjunto de pontos vinculados (set). Supervisores multi-ponto informam pontoId nos registros de entrada/saída e check-ins.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pontoIds\": [\"{{pontoId}}\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/supervisores/{{supervisorId}}/pontos", "host": ["{{baseUrl}}"], "path": ["supervisores","{{supervisorId}}","pontos"] }
+          }
+        },
+        {
+          "name": "Regenerar agentKey do supervisor",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.agentKey) { pm.collectionVariables.set('agentKeySup', json.agentKey); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/supervisores/{{supervisorId}}/agentkey/regenerar", "host": ["{{baseUrl}}"], "path": ["supervisores","{{supervisorId}}","agentkey","regenerar"] }
+          }
+        },
+        {
+          "name": "Rondas de supervisão (entrada→saída pareadas)",
+          "description": "Pareia registros ENTRADA→SAIDA por supervisor+ponto e calcula a permanência.\n\nQuery params opcionais: supervisorId, pontoId, dataInicio (YYYY-MM-DD), dataFim (YYYY-MM-DD). Padrão: últimos 7 dias.\n\nResposta: { visitas: [{ supervisorId, supervisorNome, pontoId, pontoNome, entradaEm, saidaEm, duracaoMinutos, emAberto }], periodo }",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/supervisores/rondas?dataInicio=2026-07-01&dataFim=2026-07-10",
+              "host": ["{{baseUrl}}"],
+              "path": ["supervisores","rondas"],
+              "query": [
+                { "key": "supervisorId", "value": "{{supervisorId}}", "disabled": true },
+                { "key": "pontoId", "value": "{{pontoId}}", "disabled": true },
+                { "key": "dataInicio", "value": "2026-07-01" },
+                { "key": "dataFim", "value": "2026-07-10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Registrar ENTRADA no ponto (agentKey do supervisor)",
+          "description": "Endpoint exclusivo para chave de supervisor. Body opcional: { pontoId } para supervisores vinculados a vários pontos (validado contra os pontos vinculados). Grava ip/userAgent para auditoria e emite evento SUPERVISOR_ENTRADA.\n\nResposta 201: { aceito, tipo: 'ENTRADA', registradoEm, ponto: {id,nome}, supervisor: {id,nome}, mensagem }",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "pm.test('Entrada registrada', () => pm.response.to.have.status(201));",
+            "pm.test('Resposta com nome', () => pm.expect(json.supervisor).to.have.property('nome'));"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeySup}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/supervisor/entrada", "host": ["{{baseUrl}}"], "path": ["api","field","v1","supervisor","entrada"] }
+          }
+        },
+        {
+          "name": "Registrar SAÍDA do ponto (agentKey do supervisor)",
+          "description": "Fecha a visita aberta pela ENTRADA correspondente (pareamento é feito na consulta de rondas). Body opcional: { pontoId }.\n\nResposta 201: { aceito, tipo: 'SAIDA', registradoEm, ponto: {id,nome}, supervisor: {id,nome}, mensagem }",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Saída registrada', () => pm.response.to.have.status(201));"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeySup}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pontoId\": \"{{pontoId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/supervisor/saida", "host": ["{{baseUrl}}"], "path": ["api","field","v1","supervisor","saida"] }
+          }
+        }
+      ]
+    },
+
+    {
       "name": "🏪 Abertura de Lojas",
       "description": "Módulo principal do OpenCheck.\n\nFluxo da ferramenta Windows:\n1. Operador abre a loja e pressiona CTRL+SHIFT+A\n2. Ferramenta Windows chama GET /abertura/ponto-por-maquina para resolver o pontoId\n3. Ferramenta Windows chama POST /abertura/checkin com JWT + nomeComputador\n4. Sistema registra, cancela job de alerta e emite evento Socket.io\n\nFluxo de alerta:\n- Job BullMQ executa no horaDeadline de cada ConfigAbertura\n- Se não houver RegistroAbertura no dia → cria registro AUSENTE + dispara alertas",
       "item": [
@@ -298,18 +425,31 @@
           "name": "✅ Check-in de Abertura",
           "item": [
             {
-              "name": "Registrar abertura via agentKey (app Windows)",
-              "description": "Chamado pela ferramenta Windows ao detectar CTRL+SHIFT+A.\nUsa x-agent-key do ponto — não requer JWT.\nnomeComputador e usuarioWindows são coletados pelo cliente Windows.",
+              "name": "Registrar abertura via agentKey",
+              "description": "Usa x-agent-key do ponto, operador ou supervisor — não requer JWT.\n\nBody (todos opcionais):\n- codigo: código de 4 dígitos de operador OU supervisor (resolve operador primeiro)\n- pontoId: para chaves de operador/supervisor multi-ponto, indica o ponto (validado contra os pontos vinculados)\n- nomeComputador / usuarioWindows: coletados pelo cliente\n\nResposta 201: { aceito, tipo: 'ABERTURA', status: NO_PRAZO|ATRASADO, registradoEm, deadlineEm, ponto: {id,nome}, registradoPor: {id,nome,tipo}, mensagem }",
               "event": [{ "listen": "test", "script": { "exec": [
                 "var json = pm.response.json();",
-                "if (json.id) { pm.collectionVariables.set('aberturaId', json.id); }",
-                "pm.test('Check-in registrado', () => pm.response.to.have.status(201));"
+                "pm.test('Check-in aceito', () => pm.response.to.have.status(201));",
+                "pm.test('Resposta enriquecida', () => pm.expect(json.aceito).to.be.true && pm.expect(json).to.have.property('registradoPor'));"
               ], "type": "text/javascript" } }],
               "request": {
                 "method": "POST",
                 "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }, { "key": "Content-Type", "value": "application/json" }],
-                "body": { "mode": "raw", "raw": "{\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"joao.silva\"\n}" },
+                "body": { "mode": "raw", "raw": "{\n  \"codigo\": \"2027\",\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"joao.silva\"\n}" },
                 "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/checkin", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","checkin"] }
+              }
+            },
+            {
+              "name": "Pré-validar código (identificar operador/supervisor)",
+              "description": "Antes do check-in, o app consulta o dono do código para confirmar na tela: \"Registrar como Fulano?\".\n\nResposta 200: { valido: true, ator: { id, nome, tipo: OPERADOR|SUPERVISOR } }\nResposta 404: { valido: false, erro: CODIGO_NAO_ENCONTRADO }",
+              "event": [{ "listen": "test", "script": { "exec": [
+                "var json = pm.response.json();",
+                "pm.test('Código válido', () => pm.expect(json.valido).to.be.true);"
+              ], "type": "text/javascript" } }],
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+                "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/codigo/2027", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","codigo","2027"] }
               }
             },
             {
@@ -343,10 +483,12 @@
               }
             },
             {
-              "name": "Registrar fechamento via agentKey (app Windows)",
-              "description": "Check-in de fechamento usando x-agent-key do ponto. Registra a hora de fechamento e cancela o job de deadline pendente.",
+              "name": "Registrar fechamento via agentKey",
+              "description": "Check-in de fechamento usando x-agent-key do ponto, operador ou supervisor. Registra a hora de fechamento e cancela o job de deadline pendente.\n\nBody (todos opcionais): codigo (operador ou supervisor), pontoId (multi-ponto), nomeComputador, usuarioWindows.\n\nResposta 201: { aceito, tipo: 'FECHAMENTO', status, registradoEm, ponto: {id,nome}, registradoPor: {id,nome,tipo}, mensagem }",
               "event": [{ "listen": "test", "script": { "exec": [
-                "pm.test('Fechamento registrado', () => pm.response.to.have.status(200));"
+                "var json = pm.response.json();",
+                "pm.test('Fechamento aceito', () => pm.response.to.have.status(201));",
+                "pm.test('Resposta enriquecida', () => pm.expect(json.aceito).to.be.true);"
               ], "type": "text/javascript" } }],
               "request": {
                 "method": "POST",
