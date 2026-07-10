@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import { generateAgentKey, gerarCodigoUnico, maskAgentKey } from '../field-api/field-api.utils.js'
+import { getRondas } from './supervisores.service.js'
 
 const supervisorCreateSchema = z.object({
   nome:     z.string().trim().min(1, 'Nome é obrigatório'),
@@ -68,64 +69,10 @@ export async function supervisoresRoutes(app: FastifyInstance) {
       ? new Date(`${query.dataInicio}T00:00:00.000-03:00`)
       : new Date(dataFim.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-    const registros = await prisma.registroSupervisor.findMany({
-      where: {
-        tenantId,
-        ...(query.supervisorId ? { supervisorId: query.supervisorId } : {}),
-        ...(query.pontoId ? { pontoId: query.pontoId } : {}),
-        registradoEm: { gte: dataInicio, lte: dataFim },
-      },
-      include: {
-        supervisor: { select: { nome: true } },
-        ponto:      { select: { nome: true } },
-      },
-      orderBy: { registradoEm: 'asc' },
-      take: 2000,
-    })
-
-    // Pareia ENTRADA→SAIDA por supervisor+ponto, em ordem cronológica
-    const visitas: {
-      supervisorId: string; supervisorNome: string
-      pontoId: string; pontoNome: string
-      entradaEm: Date | null; saidaEm: Date | null
-      duracaoMinutos: number | null; emAberto: boolean
-    }[] = []
-    const abertas = new Map<string, number>() // chave supervisor+ponto → índice em visitas
-
-    for (const r of registros) {
-      const chave = `${r.supervisorId}:${r.pontoId}`
-      if (r.tipo === 'ENTRADA') {
-        // Entrada sem saída anterior fica registrada como visita em aberto
-        abertas.set(chave, visitas.push({
-          supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
-          pontoId: r.pontoId, pontoNome: r.ponto.nome,
-          entradaEm: r.registradoEm, saidaEm: null,
-          duracaoMinutos: null, emAberto: true,
-        }) - 1)
-      } else {
-        const idx = abertas.get(chave)
-        if (idx !== undefined) {
-          const v = visitas[idx]
-          v.saidaEm = r.registradoEm
-          v.duracaoMinutos = Math.round((r.registradoEm.getTime() - v.entradaEm!.getTime()) / 60_000)
-          v.emAberto = false
-          abertas.delete(chave)
-        } else {
-          // Saída órfã (sem entrada no período) — exibida mesmo assim para auditoria
-          visitas.push({
-            supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
-            pontoId: r.pontoId, pontoNome: r.ponto.nome,
-            entradaEm: null, saidaEm: r.registradoEm,
-            duracaoMinutos: null, emAberto: false,
-          })
-        }
-      }
-    }
-
-    visitas.sort((a, b) => {
-      const ta = (a.entradaEm ?? a.saidaEm)!.getTime()
-      const tb = (b.entradaEm ?? b.saidaEm)!.getTime()
-      return tb - ta
+    const visitas = await getRondas(tenantId, {
+      supervisorId: query.supervisorId,
+      pontoId:      query.pontoId,
+      dataInicio, dataFim,
     })
 
     return { visitas, periodo: { dataInicio, dataFim } }

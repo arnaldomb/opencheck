@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
+import { getRondas } from '../supervisores/supervisores.service.js'
 
 const TZ = 'America/Sao_Paulo'
 
@@ -191,6 +192,51 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       pontos,
       resumo:   { totalLinhas, abertas, abertasFora, naoAbriram, fechadas, naoFecharam },
       linhas,
+    }
+  })
+
+  app.get('/rondas', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const { de, ate, pontoId, supervisorId } = request.query as Record<string, string>
+
+    if (!de || !ate) return reply.status(400).send({ error: 'Parâmetros de e ate são obrigatórios' })
+
+    const dataInicio = new Date(`${de}T00:00:00-03:00`)
+    const dataFim    = new Date(`${ate}T23:59:59-03:00`)
+
+    const [tenant, supervisores, visitas] = await Promise.all([
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true } }),
+      prisma.supervisor.findMany({
+        where: { tenantId, ...(supervisorId ? { id: supervisorId } : {}), ativo: true },
+        select: { id: true, nome: true },
+        orderBy: { nome: 'asc' },
+      }),
+      getRondas(tenantId, { supervisorId, pontoId, dataInicio, dataFim }),
+    ])
+
+    const concluidas       = visitas.filter(v => !v.emAberto && v.entradaEm && v.saidaEm)
+    const emAberto         = visitas.filter(v => v.emAberto).length
+    const saidasSemEntrada = visitas.filter(v => !v.entradaEm).length
+    const tempoTotal       = concluidas.reduce((acc, v) => acc + (v.duracaoMinutos ?? 0), 0)
+    const pontosVisitados  = new Set(visitas.map(v => v.pontoId)).size
+    const supervisoresAtivos = new Set(visitas.map(v => v.supervisorId)).size
+
+    return {
+      geradoEm: new Date().toISOString(),
+      empresa:  tenant ?? { id: tenantId, nome: 'Empresa' },
+      periodo:  { de, ate },
+      supervisores,
+      resumo: {
+        totalVisitas:       visitas.length,
+        concluidas:         concluidas.length,
+        emAberto,
+        saidasSemEntrada,
+        tempoTotalMinutos:  tempoTotal,
+        tempoMedioMinutos:  concluidas.length > 0 ? Math.round(tempoTotal / concluidas.length) : 0,
+        pontosVisitados,
+        supervisoresAtivos,
+      },
+      visitas,
     }
   })
 }

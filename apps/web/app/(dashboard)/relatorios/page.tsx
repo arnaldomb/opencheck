@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react'
 import { apiFetch } from '@/lib/api'
 import {
   FileText, Download, Loader2, Calendar, FileSpreadsheet,
-  Building2, MapPin, CheckCircle, Activity, Store, Clock,
+  Building2, MapPin, CheckCircle, Activity, Store, Clock, ShieldCheck,
 } from 'lucide-react'
 
 interface Ponto { id: string; nome: string; endereco?: string }
+interface SupervisorItem { id: string; nome: string }
 
 // ── Abertura/Fechamento ────────────────────────────────────────────────────
 interface LinhaAbertura {
@@ -34,6 +35,38 @@ interface RelatorioCiclos {
   resumo: { totalCiclos: number; ciclosConcluidos: number; ciclosAlerta: number; totalEventos: number; totalCheckins: number; totalAlertas: number; taxaCumprimento: number }
   eventos: { id: string; tipo: string; codigoEvento: string | null; ponto: string; vigilante: string; ocorridoEm: string; encaminhado: boolean; monitorado: boolean }[]
   ciclos: { id: string; ponto: string; status: string; iniciadoEm: string; finalizadoEm: string | null; checkinEm: string | null }[]
+}
+
+// ── Rondas de Supervisão ───────────────────────────────────────────────────
+interface VisitaRonda {
+  supervisorId: string; supervisorNome: string
+  pontoId: string; pontoNome: string
+  entradaEm: string | null; saidaEm: string | null
+  duracaoMinutos: number | null; emAberto: boolean
+}
+interface RelatorioRondas {
+  geradoEm: string
+  empresa: { id: string; nome: string }
+  periodo: { de: string; ate: string }
+  supervisores: SupervisorItem[]
+  resumo: {
+    totalVisitas: number; concluidas: number; emAberto: number; saidasSemEntrada: number
+    tempoTotalMinutos: number; tempoMedioMinutos: number
+    pontosVisitados: number; supervisoresAtivos: number
+  }
+  visitas: VisitaRonda[]
+}
+
+function fmtDuracao(min: number | null) {
+  if (min === null) return '—'
+  if (min < 60) return `${min} min`
+  return `${Math.floor(min / 60)}h ${min % 60}min`
+}
+
+function statusVisita(v: VisitaRonda): string {
+  if (v.emAberto) return 'Em aberto'
+  if (!v.entradaEm) return 'Saída sem entrada'
+  return 'Concluída'
 }
 
 const STATUS_ABERTURA_COLOR: Record<string, string> = {
@@ -345,34 +378,168 @@ async function gerarExcelCiclos(dados: RelatorioCiclos) {
   XLSX.writeFile(wb, `ciclos-${dados.periodo.de}-${dados.periodo.ate}.xlsx`)
 }
 
+// ── PDF Rondas ─────────────────────────────────────────────────────────────
+async function gerarPDFRondas(dados: RelatorioRondas) {
+  const { default: jsPDF }    = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+
+  const doc  = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const W    = doc.internal.pageSize.getWidth()
+  const blue = [0, 82, 204] as [number, number, number]
+  const gray = [100, 100, 100] as [number, number, number]
+
+  doc.setFillColor(...blue)
+  doc.rect(0, 0, W, 22, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+  doc.text('OpenCheck', 12, 10)
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+  doc.text('Relatório de Rondas de Supervisão', 12, 17)
+  doc.text(`${dados.empresa.nome}`, W - 12, 10, { align: 'right' })
+  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, W - 12, 17, { align: 'right' })
+
+  doc.setTextColor(...gray); doc.setFontSize(8)
+  doc.text(`Supervisores: ${dados.supervisores.map(s => s.nome).join(' · ') || 'Todos'}`, 12, 28)
+  doc.text(`Gerado em: ${fmtDateTime(dados.geradoEm)}`, W - 12, 28, { align: 'right' })
+
+  const cards = [
+    { label: 'Total de visitas',   value: String(dados.resumo.totalVisitas) },
+    { label: 'Concluídas',         value: String(dados.resumo.concluidas) },
+    { label: 'Em aberto',          value: String(dados.resumo.emAberto) },
+    { label: 'Tempo total',        value: fmtDuracao(dados.resumo.tempoTotalMinutos) },
+    { label: 'Permanência média',  value: fmtDuracao(dados.resumo.tempoMedioMinutos) },
+    { label: 'Pontos visitados',   value: String(dados.resumo.pontosVisitados) },
+  ]
+  const cardW = (W - 24) / cards.length
+  cards.forEach((c, i) => {
+    const x = 12 + i * cardW
+    doc.setFillColor(245, 247, 250)
+    doc.roundedRect(x, 32, cardW - 3, 18, 2, 2, 'F')
+    doc.setTextColor(...blue); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+    doc.text(c.value, x + (cardW - 3) / 2, 42, { align: 'center' })
+    doc.setTextColor(...gray); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+    doc.text(c.label, x + (cardW - 3) / 2, 47, { align: 'center' })
+  })
+
+  doc.setTextColor(30, 30, 30); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+  doc.text('Visitas de Supervisão', 12, 60)
+
+  autoTable(doc, {
+    startY: 63,
+    head: [['Supervisor', 'Ponto', 'Entrada', 'Saída', 'Permanência', 'Status']],
+    body: dados.visitas.map(v => [
+      v.supervisorNome,
+      v.pontoNome,
+      v.entradaEm ? fmtDateTime(v.entradaEm) : '—',
+      v.saidaEm   ? fmtDateTime(v.saidaEm)   : '—',
+      fmtDuracao(v.duracaoMinutos),
+      statusVisita(v),
+    ]),
+    headStyles: { fillColor: blue, textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    alternateRowStyles: { fillColor: [248, 249, 252] },
+    didDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const val = String(data.cell.raw)
+        if (val === 'Concluída') doc.setTextColor(22, 163, 74)
+        else if (val === 'Em aberto') doc.setTextColor(202, 138, 4)
+        else doc.setTextColor(220, 38, 38)
+      }
+    },
+    margin: { left: 12, right: 12 },
+  })
+
+  const pages = doc.getNumberOfPages()
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i)
+    const H = doc.internal.pageSize.getHeight()
+    doc.setDrawColor(220, 220, 220)
+    doc.line(12, H - 8, W - 12, H - 8)
+    doc.setTextColor(180, 180, 180); doc.setFontSize(7)
+    doc.text('OpenCheck — Relatório de Rondas de Supervisão', 12, H - 4)
+    doc.text(`Página ${i} de ${pages}`, W - 12, H - 4, { align: 'right' })
+  }
+
+  doc.save(`rondas-supervisao-${dados.periodo.de}-${dados.periodo.ate}.pdf`)
+}
+
+// ── Excel Rondas ───────────────────────────────────────────────────────────
+async function gerarExcelRondas(dados: RelatorioRondas) {
+  const XLSX = await import('xlsx')
+  const wb   = XLSX.utils.book_new()
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['OpenCheck — Relatório de Rondas de Supervisão'], [],
+    ['Empresa',      dados.empresa.nome],
+    ['Período',      `${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`],
+    ['Supervisores', dados.supervisores.map(s => s.nome).join(', ') || 'Todos'],
+    ['Gerado em',    fmtDateTime(dados.geradoEm)], [],
+    ['RESUMO'],
+    ['Total de visitas',    dados.resumo.totalVisitas],
+    ['Concluídas',          dados.resumo.concluidas],
+    ['Em aberto',           dados.resumo.emAberto],
+    ['Saídas sem entrada',  dados.resumo.saidasSemEntrada],
+    ['Tempo total',         fmtDuracao(dados.resumo.tempoTotalMinutos)],
+    ['Permanência média',   fmtDuracao(dados.resumo.tempoMedioMinutos)],
+    ['Pontos visitados',    dados.resumo.pontosVisitados],
+    ['Supervisores ativos', dados.resumo.supervisoresAtivos],
+  ]), 'Resumo')
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Supervisor', 'Ponto', 'Entrada', 'Saída', 'Permanência', 'Status'],
+    ...dados.visitas.map(v => [
+      v.supervisorNome,
+      v.pontoNome,
+      v.entradaEm ? fmtDateTime(v.entradaEm) : '—',
+      v.saidaEm   ? fmtDateTime(v.saidaEm)   : '—',
+      fmtDuracao(v.duracaoMinutos),
+      statusVisita(v),
+    ]),
+  ]), 'Rondas')
+
+  XLSX.writeFile(wb, `rondas-supervisao-${dados.periodo.de}-${dados.periodo.ate}.xlsx`)
+}
+
 // ── Página ─────────────────────────────────────────────────────────────────
 export default function RelatoriosPage() {
-  const [aba,      setAba]      = useState<'abertura' | 'ciclos'>('abertura')
+  const [aba,      setAba]      = useState<'abertura' | 'ciclos' | 'rondas'>('abertura')
   const [pontos,   setPontos]   = useState<Ponto[]>([])
+  const [supervisores, setSupervisores] = useState<SupervisorItem[]>([])
   const [pontoId,  setPontoId]  = useState('')
+  const [supervisorId, setSupervisorId] = useState('')
   const [de,       setDe]       = useState('')
   const [ate,      setAte]      = useState('')
   const [previewAb, setPreviewAb] = useState<RelatorioAbertura | null>(null)
   const [previewCi, setPreviewCi] = useState<RelatorioCiclos | null>(null)
+  const [previewRo, setPreviewRo] = useState<RelatorioRondas | null>(null)
   const [loading,  setLoading]  = useState(false)
   const [erro,     setErro]     = useState('')
 
   useEffect(() => {
     apiFetch<Ponto[]>('/pontos').then(setPontos).catch(() => {})
+    apiFetch<SupervisorItem[]>('/supervisores').then(setSupervisores).catch(() => {})
   }, [])
+
+  function limparPreviews() {
+    setPreviewAb(null); setPreviewCi(null); setPreviewRo(null)
+  }
 
   async function carregar() {
     if (!de || !ate) { setErro('Selecione o período'); return }
-    setLoading(true); setErro(''); setPreviewAb(null); setPreviewCi(null)
+    setLoading(true); setErro(''); limparPreviews()
     try {
       const q = new URLSearchParams({ de, ate })
       if (pontoId) q.set('pontoId', pontoId)
       if (aba === 'abertura') {
         const dados = await apiFetch<RelatorioAbertura>(`/relatorios/abertura?${q}`)
         setPreviewAb(dados)
-      } else {
+      } else if (aba === 'ciclos') {
         const dados = await apiFetch<RelatorioCiclos>(`/relatorios/ciclos?${q}`)
         setPreviewCi(dados)
+      } else {
+        if (supervisorId) q.set('supervisorId', supervisorId)
+        const dados = await apiFetch<RelatorioRondas>(`/relatorios/rondas?${q}`)
+        setPreviewRo(dados)
       }
     } catch (e) { setErro(String(e)) }
     finally { setLoading(false) }
@@ -387,12 +554,15 @@ export default function RelatoriosPage() {
       } else if (aba === 'ciclos' && previewCi) {
         if (tipo === 'pdf') await gerarPDFCiclos(previewCi)
         else await gerarExcelCiclos(previewCi)
+      } else if (aba === 'rondas' && previewRo) {
+        if (tipo === 'pdf') await gerarPDFRondas(previewRo)
+        else await gerarExcelRondas(previewRo)
       }
     } catch (e) { setErro(String(e)) }
     finally { setLoading(false) }
   }
 
-  const hasPreview = aba === 'abertura' ? !!previewAb : !!previewCi
+  const hasPreview = aba === 'abertura' ? !!previewAb : aba === 'ciclos' ? !!previewCi : !!previewRo
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -404,16 +574,22 @@ export default function RelatoriosPage() {
       {/* Abas */}
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
         <button
-          onClick={() => { setAba('abertura'); setPreviewAb(null); setPreviewCi(null) }}
+          onClick={() => { setAba('abertura'); limparPreviews() }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'abertura' ? 'bg-white text-ggtech-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <Store className="h-4 w-4" /> Abertura / Fechamento
         </button>
         <button
-          onClick={() => { setAba('ciclos'); setPreviewAb(null); setPreviewCi(null) }}
+          onClick={() => { setAba('ciclos'); limparPreviews() }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'ciclos' ? 'bg-white text-ggtech-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <Activity className="h-4 w-4" /> Ciclos e Eventos
+        </button>
+        <button
+          onClick={() => { setAba('rondas'); limparPreviews() }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'rondas' ? 'bg-white text-ggtech-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <ShieldCheck className="h-4 w-4" /> Rondas de Supervisão
         </button>
       </div>
 
@@ -422,7 +598,7 @@ export default function RelatoriosPage() {
         <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
           <FileText className="h-4 w-4 text-ggtech-blue" />
           <h2 className="font-heading font-semibold text-gray-800">
-            {aba === 'abertura' ? 'Relatório de Abertura / Fechamento' : 'Relatório de Ciclos e Eventos'}
+            {aba === 'abertura' ? 'Relatório de Abertura / Fechamento' : aba === 'ciclos' ? 'Relatório de Ciclos e Eventos' : 'Relatório de Rondas de Supervisão'}
           </h2>
         </div>
 
@@ -442,6 +618,15 @@ export default function RelatoriosPage() {
               {pontos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
           </div>
+          {aba === 'rondas' && (
+            <div>
+              <label className="label flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5" /> Supervisor (opcional)</label>
+              <select className="input" value={supervisorId} onChange={e => setSupervisorId(e.target.value)}>
+                <option value="">Todos os supervisores</option>
+                {supervisores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {erro && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erro}</div>}
@@ -595,6 +780,91 @@ export default function RelatoriosPage() {
               {previewCi.eventos.length > 10 && (
                 <p className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
                   + {previewCi.eventos.length - 10} eventos adicionais incluídos no relatório completo
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={() => exportar('pdf')} disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-2 py-3 text-sm">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Exportar PDF
+            </button>
+            <button onClick={() => exportar('excel')} disabled={loading} className="btn-outline flex-1 flex items-center justify-center gap-2 py-3 text-sm">
+              <FileSpreadsheet className="h-4 w-4" /> Exportar Excel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Rondas */}
+      {aba === 'rondas' && previewRo && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Visitas',            value: previewRo.resumo.totalVisitas,               color: 'text-ggtech-blue' },
+              { label: 'Concluídas',         value: previewRo.resumo.concluidas,                  color: 'text-green-600' },
+              { label: 'Em aberto',          value: previewRo.resumo.emAberto,                    color: previewRo.resumo.emAberto > 0 ? 'text-yellow-600' : 'text-gray-600' },
+              { label: 'Tempo total',        value: fmtDuracao(previewRo.resumo.tempoTotalMinutos), color: 'text-gray-700' },
+              { label: 'Permanência média',  value: fmtDuracao(previewRo.resumo.tempoMedioMinutos), color: 'text-gray-700' },
+              { label: 'Pontos visitados',   value: previewRo.resumo.pontosVisitados,             color: 'text-ggtech-blue' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="card p-4 flex flex-col items-center text-center">
+                <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="card p-4 flex items-center gap-3 text-sm text-gray-600">
+            <Building2 className="h-4 w-4 text-ggtech-blue flex-shrink-0" />
+            <span>
+              <strong>{previewRo.empresa.nome}</strong> · {fmtDate(previewRo.periodo.de)} a {fmtDate(previewRo.periodo.ate)} ·{' '}
+              {previewRo.resumo.supervisoresAtivos} supervisor(es) ativo(s) · {previewRo.visitas.length} visitas
+            </span>
+          </div>
+
+          <div className="card p-0 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-ggtech-blue" />
+              <h3 className="font-semibold text-sm text-gray-800">Prévia — Visitas ({previewRo.visitas.length})</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-400 uppercase tracking-wide">
+                  <tr>
+                    {['Supervisor','Ponto','Entrada','Saída','Permanência','Status'].map(h => (
+                      <th key={h} className="px-4 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {previewRo.visitas.slice(0, 15).map((v, i) => {
+                    const st = statusVisita(v)
+                    return (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium">{v.supervisorNome}</td>
+                        <td className="px-4 py-2">{v.pontoNome}</td>
+                        <td className="px-4 py-2 text-gray-500">{v.entradaEm ? fmtDateTime(v.entradaEm) : '—'}</td>
+                        <td className="px-4 py-2 text-gray-500">{v.saidaEm ? fmtDateTime(v.saidaEm) : '—'}</td>
+                        <td className="px-4 py-2 text-gray-500">{fmtDuracao(v.duracaoMinutos)}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            st === 'Concluída' ? 'bg-green-100 text-green-700'
+                            : st === 'Em aberto' ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                          }`}>
+                            {st}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {previewRo.visitas.length > 15 && (
+                <p className="px-4 py-2 text-xs text-gray-400 border-t border-gray-50">
+                  + {previewRo.visitas.length - 15} visitas adicionais incluídas no relatório completo
                 </p>
               )}
             </div>
