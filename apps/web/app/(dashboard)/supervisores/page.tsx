@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { apiFetch } from '@/lib/api'
-import { ShieldCheck, Plus, Phone, MapPin, Loader2, Pencil, Trash2, X, Save, Copy, Check, Hash, KeyRound } from 'lucide-react'
+import { ShieldCheck, Plus, Phone, MapPin, Loader2, Pencil, Trash2, X, Save, Copy, Check, Hash, KeyRound, Footprints } from 'lucide-react'
 
 interface Supervisor {
   id: string
@@ -101,9 +102,14 @@ export default function SupervisoresPage() {
           <h1 className="font-heading font-bold text-2xl text-gray-900">Supervisores</h1>
           <p className="text-gray-500 text-sm mt-1">{supervisores.length} supervisor(es) cadastrado(s)</p>
         </div>
-        <button onClick={abrirNovo} className="btn-primary flex items-center gap-2">
-          <Plus className="h-4 w-4" /> Novo supervisor
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href="/supervisores/rondas" className="btn-ghost flex items-center gap-2">
+            <Footprints className="h-4 w-4" /> Rondas
+          </Link>
+          <button onClick={abrirNovo} className="btn-primary flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Novo supervisor
+          </button>
+        </div>
       </div>
 
       {/* Lista */}

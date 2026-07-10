@@ -1,17 +1,24 @@
 import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
+import { z } from 'zod'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
-import { generateAgentKey } from '../field-api/field-api.utils.js'
+import { generateAgentKey, gerarCodigoUnico, maskAgentKey } from '../field-api/field-api.utils.js'
 
-async function gerarCodigoUnico(tenantId: string): Promise<string> {
-  for (let i = 0; i < 20; i++) {
-    const codigo = String(Math.floor(1000 + Math.random() * 9000))
-    const existe = await prisma.operador.findFirst({ where: { tenantId, codigo } })
-    if (!existe) return codigo
-  }
-  throw new Error('Não foi possível gerar código único para o operador')
-}
+const operadorCreateSchema = z.object({
+  nome:     z.string().trim().min(1, 'Nome é obrigatório'),
+  telefone: z.string().trim().optional(),
+  rfid:     z.string().trim().optional(),
+  email:    z.string().trim().email('Email inválido').optional(),
+  senha:    z.string().min(6, 'Senha deve ter no mínimo 6 caracteres').optional(),
+})
+
+const operadorUpdateSchema = z.object({
+  nome:     z.string().trim().min(1).optional(),
+  telefone: z.string().trim().optional(),
+  rfid:     z.string().trim().optional(),
+  ativo:    z.boolean().optional(),
+})
 
 export async function operadoresRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
@@ -33,10 +40,11 @@ export async function operadoresRoutes(app: FastifyInstance) {
 
   app.post('/', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-    const body = request.body as {
-      nome: string; telefone?: string; rfid?: string
-      email?: string; senha?: string
+    const parsed = operadorCreateSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos' })
     }
+    const body = parsed.data
 
     const env = (process.env.AGENT_KEY_ENV ?? 'live') as 'live' | 'test'
     const codigo = await gerarCodigoUnico(tenantId)
@@ -76,16 +84,20 @@ export async function operadoresRoutes(app: FastifyInstance) {
       include: { pontos: { select: { id: true, nome: true } } },
     })
     if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
-    return operador
+    return { ...operador, agentKey: maskAgentKey(operador.agentKey) }
   })
 
   app.put('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const body = request.body as { nome?: string; telefone?: string; rfid?: string; ativo?: boolean }
+    const parsed = operadorUpdateSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos' })
+    }
     const operador = await prisma.operador.findFirst({ where: { id, tenantId } })
     if (!operador) return reply.status(404).send({ error: 'Operador não encontrado' })
-    return prisma.operador.update({ where: { id }, data: body })
+    const updated = await prisma.operador.update({ where: { id }, data: parsed.data })
+    return { ...updated, agentKey: maskAgentKey(updated.agentKey) }
   })
 
   app.delete('/:id', async (request, reply) => {

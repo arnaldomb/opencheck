@@ -1,23 +1,26 @@
 import type { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
-import { generateAgentKey } from '../field-api/field-api.utils.js'
+import { generateAgentKey, gerarCodigoUnico, maskAgentKey } from '../field-api/field-api.utils.js'
 
-async function gerarCodigoUnico(tenantId: string): Promise<string> {
-  for (let i = 0; i < 20; i++) {
-    const codigo = String(Math.floor(1000 + Math.random() * 9000))
-    const existe = await prisma.supervisor.findFirst({ where: { tenantId, codigo } })
-    if (!existe) return codigo
-  }
-  throw new Error('Não foi possível gerar código único para o supervisor')
-}
+const supervisorCreateSchema = z.object({
+  nome:     z.string().trim().min(1, 'Nome é obrigatório'),
+  telefone: z.string().trim().optional(),
+})
+
+const supervisorUpdateSchema = z.object({
+  nome:     z.string().trim().min(1).optional(),
+  telefone: z.string().trim().optional(),
+  ativo:    z.boolean().optional(),
+})
 
 export async function supervisoresRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
   app.get('/', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
-    return prisma.supervisor.findMany({
+    const supervisores = await prisma.supervisor.findMany({
       where: { tenantId, ativo: true },
       select: {
         id: true, tenantId: true,
@@ -28,11 +31,16 @@ export async function supervisoresRoutes(app: FastifyInstance) {
       },
       orderBy: { criadoEm: 'desc' },
     })
+    return supervisores.map(s => ({ ...s, agentKey: maskAgentKey(s.agentKey) }))
   })
 
   app.post('/', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-    const body = request.body as { nome: string; telefone?: string }
+    const parsed = supervisorCreateSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos' })
+    }
+    const body = parsed.data
 
     const env = (process.env.AGENT_KEY_ENV ?? 'live') as 'live' | 'test'
     const codigo = await gerarCodigoUnico(tenantId)
@@ -50,6 +58,79 @@ export async function supervisoresRoutes(app: FastifyInstance) {
     return reply.status(201).send(supervisor)
   })
 
+  // GET /rondas — visitas de supervisão (entrada→saída pareadas)
+  app.get('/rondas', async (request) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const query = request.query as { supervisorId?: string; pontoId?: string; dataInicio?: string; dataFim?: string }
+
+    const dataFim = query.dataFim ? new Date(`${query.dataFim}T23:59:59.999-03:00`) : new Date()
+    const dataInicio = query.dataInicio
+      ? new Date(`${query.dataInicio}T00:00:00.000-03:00`)
+      : new Date(dataFim.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+    const registros = await prisma.registroSupervisor.findMany({
+      where: {
+        tenantId,
+        ...(query.supervisorId ? { supervisorId: query.supervisorId } : {}),
+        ...(query.pontoId ? { pontoId: query.pontoId } : {}),
+        registradoEm: { gte: dataInicio, lte: dataFim },
+      },
+      include: {
+        supervisor: { select: { nome: true } },
+        ponto:      { select: { nome: true } },
+      },
+      orderBy: { registradoEm: 'asc' },
+      take: 2000,
+    })
+
+    // Pareia ENTRADA→SAIDA por supervisor+ponto, em ordem cronológica
+    const visitas: {
+      supervisorId: string; supervisorNome: string
+      pontoId: string; pontoNome: string
+      entradaEm: Date | null; saidaEm: Date | null
+      duracaoMinutos: number | null; emAberto: boolean
+    }[] = []
+    const abertas = new Map<string, number>() // chave supervisor+ponto → índice em visitas
+
+    for (const r of registros) {
+      const chave = `${r.supervisorId}:${r.pontoId}`
+      if (r.tipo === 'ENTRADA') {
+        // Entrada sem saída anterior fica registrada como visita em aberto
+        abertas.set(chave, visitas.push({
+          supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
+          pontoId: r.pontoId, pontoNome: r.ponto.nome,
+          entradaEm: r.registradoEm, saidaEm: null,
+          duracaoMinutos: null, emAberto: true,
+        }) - 1)
+      } else {
+        const idx = abertas.get(chave)
+        if (idx !== undefined) {
+          const v = visitas[idx]
+          v.saidaEm = r.registradoEm
+          v.duracaoMinutos = Math.round((r.registradoEm.getTime() - v.entradaEm!.getTime()) / 60_000)
+          v.emAberto = false
+          abertas.delete(chave)
+        } else {
+          // Saída órfã (sem entrada no período) — exibida mesmo assim para auditoria
+          visitas.push({
+            supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
+            pontoId: r.pontoId, pontoNome: r.ponto.nome,
+            entradaEm: null, saidaEm: r.registradoEm,
+            duracaoMinutos: null, emAberto: false,
+          })
+        }
+      }
+    }
+
+    visitas.sort((a, b) => {
+      const ta = (a.entradaEm ?? a.saidaEm)!.getTime()
+      const tb = (b.entradaEm ?? b.saidaEm)!.getTime()
+      return tb - ta
+    })
+
+    return { visitas, periodo: { dataInicio, dataFim } }
+  })
+
   app.get('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
@@ -58,16 +139,20 @@ export async function supervisoresRoutes(app: FastifyInstance) {
       include: { pontos: { select: { id: true, nome: true } } },
     })
     if (!supervisor) return reply.status(404).send({ error: 'Supervisor não encontrado' })
-    return supervisor
+    return { ...supervisor, agentKey: maskAgentKey(supervisor.agentKey) }
   })
 
   app.put('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
-    const body = request.body as { nome?: string; telefone?: string; ativo?: boolean }
+    const parsed = supervisorUpdateSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'Dados inválidos' })
+    }
     const supervisor = await prisma.supervisor.findFirst({ where: { id, tenantId } })
     if (!supervisor) return reply.status(404).send({ error: 'Supervisor não encontrado' })
-    return prisma.supervisor.update({ where: { id }, data: body })
+    const updated = await prisma.supervisor.update({ where: { id }, data: parsed.data })
+    return { ...updated, agentKey: maskAgentKey(updated.agentKey) }
   })
 
   app.delete('/:id', async (request, reply) => {
