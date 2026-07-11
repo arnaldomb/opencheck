@@ -37,3 +37,6 @@ add-secret.cjs
 debug-*.md
 .claude/
 .planning/
+
+# Segredos locais
+.env
