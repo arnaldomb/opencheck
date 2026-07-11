@@ -84,7 +84,7 @@ export async function pontosRoutes(app: FastifyInstance) {
     const body = request.body as {
       duracaoMinutos?: number; toleranciaMinutos?: number; avisoAntesMin?: number
       codigoCheckin?: string; codigoPanico?: string; codigoFalha?: string
-      capturarSnapshot?: boolean; autoReiniciar?: boolean; ativo?: boolean
+      autoReiniciar?: boolean; ativo?: boolean
     }
 
     let config = await prisma.configCiclo.findFirst({ where: { pontoId: id } })
@@ -99,7 +99,6 @@ export async function pontosRoutes(app: FastifyInstance) {
           codigoCheckin:     padrao?.codigoCheckin     ?? '1602',
           codigoPanico:      padrao?.codigoPanico      ?? '1122',
           codigoFalha:       padrao?.codigoFalha       ?? '1130',
-          capturarSnapshot:  padrao?.capturarSnapshot  ?? true,
           autoReiniciar:     padrao?.autoReiniciar     ?? true,
         },
       })
@@ -163,7 +162,6 @@ export async function pontosRoutes(app: FastifyInstance) {
           codigoCheckin:     padrao?.codigoCheckin     ?? '1602',
           codigoPanico:      padrao?.codigoPanico      ?? '1122',
           codigoFalha:       padrao?.codigoFalha       ?? '1130',
-          capturarSnapshot:  padrao?.capturarSnapshot  ?? true,
           autoReiniciar:     padrao?.autoReiniciar      ?? true,
         },
       })

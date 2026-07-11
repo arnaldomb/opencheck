@@ -32,25 +32,6 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: opencheck_minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ── Migrate + Seed (one-shot) ─────────────────────────────────────────────
   migrate:
     build:
@@ -95,12 +76,6 @@ services:
       ASAAS_WEBHOOK_TOKEN: dev_webhook_token
       # CTRL+SAFE
       CTRLSAFE_API_URL: https://api.ctrlsafe.com.br/api/functions/v1
-      # EZVIZ — opcional em dev
-      EZVIZ_APP_KEY: ${EZVIZ_APP_KEY:-}
-      EZVIZ_APP_SECRET: ${EZVIZ_APP_SECRET:-}
-      EZVIZ_REGION: ${EZVIZ_REGION:-br}
-      EZVIZ_AUTH_URL: ${EZVIZ_AUTH_URL:-https://open.ezvizlife.com}
-      EZVIZ_API_URL: ${EZVIZ_API_URL:-https://isaopen.ezvizlife.com}
       # WhatsApp — opcional em dev
       EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
@@ -111,20 +86,12 @@ services:
       SMTP_USER: dev
       SMTP_PASS: dev
       EMAIL_FROM: dev@opencheck.local
-      # MinIO local
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_URL: http://localhost:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: snapshots
     ports:
       - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -188,4 +155,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  minio_data:

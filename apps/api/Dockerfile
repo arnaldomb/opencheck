@@ -11,7 +11,6 @@ COPY packages/database/package.json    ./packages/database/
 COPY packages/shared/package.json      ./packages/shared/
 COPY packages/ui/package.json          ./packages/ui/
 COPY packages/asaas-sdk/package.json   ./packages/asaas-sdk/
-COPY packages/ezviz-sdk/package.json   ./packages/ezviz-sdk/
 COPY packages/ctrlsafe-sdk/package.json ./packages/ctrlsafe-sdk/
 RUN pnpm install --frozen-lockfile
 
@@ -20,7 +19,6 @@ COPY . .
 RUN pnpm --filter @opencheck/database db:generate
 RUN pnpm --filter @opencheck/database build
 RUN pnpm --filter @opencheck/asaas-sdk build
-RUN pnpm --filter @opencheck/ezviz-sdk build
 RUN pnpm --filter @opencheck/api build
 
 FROM node:20-alpine AS production
@@ -34,13 +32,10 @@ COPY --from=builder /app/packages/database/package.json  ./packages/database/pac
 COPY --from=builder /app/packages/database/prisma        ./packages/database/prisma
 COPY --from=builder /app/packages/asaas-sdk/dist         ./packages/asaas-sdk/dist
 COPY --from=builder /app/packages/asaas-sdk/package.json ./packages/asaas-sdk/package.json
-COPY --from=builder /app/packages/ezviz-sdk/dist         ./packages/ezviz-sdk/dist
-COPY --from=builder /app/packages/ezviz-sdk/package.json ./packages/ezviz-sdk/package.json
 COPY --from=builder /app/node_modules                        ./node_modules
 COPY --from=builder /app/apps/api/node_modules               ./apps/api/node_modules
 COPY --from=builder /app/packages/database/node_modules      ./packages/database/node_modules
 COPY --from=builder /app/packages/asaas-sdk/node_modules     ./packages/asaas-sdk/node_modules
-COPY --from=builder /app/packages/ezviz-sdk/node_modules     ./packages/ezviz-sdk/node_modules
 
 EXPOSE 3001
 

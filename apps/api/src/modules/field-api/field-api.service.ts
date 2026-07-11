@@ -2,35 +2,9 @@ import { prisma } from '@opencheck/database'
 import { cicloAlertaQueue, notificacaoQueue } from '../../infra/redis/queues.js'
 import { getIO } from '../../infra/socket/socket.js'
 import { getConfigCiclo, getExecucaoAtiva, nowLocal } from './field-api.utils.js'
-import { getEzvizClient } from '../../infra/ezviz/ezviz.factory.js'
-import { uploadFromUrl } from '../../infra/storage/storage.service.js'
 import type { AgentContext } from './field-api.middleware.js'
 
 const TZ = 'America/Sao_Paulo'
-
-async function captureSnapshot(tenantId: string, pontoId: string, eventoId: string, attempt = 1): Promise<void> {
-  try {
-    // Brief initial delay: reduces EZVIZ timeouts when multiple events fire in quick succession
-    if (attempt === 1) await new Promise(r => setTimeout(r, 4_000))
-
-    const cameras = await prisma.camera.findMany({ where: { pontoId, ativa: true }, take: 1 })
-    if (!cameras[0]) { console.warn('[snapshot] Nenhuma câmera ativa para pontoId', pontoId); return }
-    const client     = getEzvizClient()
-    const { picUrl } = await client.captureSnapshot(cameras[0].deviceSerial, cameras[0].channelNo)
-    const key        = `${tenantId}/${cameras[0].id}/${Date.now()}.jpg`
-    const imageUrl   = await uploadFromUrl(picUrl, key)
-    await prisma.snapshot.create({ data: { cameraId: cameras[0].id, imageUrl, eventoId } })
-    console.info('[snapshot] Capturado e salvo:', imageUrl)
-  } catch (err) {
-    if (attempt < 4) {
-      const delay = attempt * 10_000
-      console.warn(`[snapshot] Tentativa ${attempt} falhou, retrying em ${delay / 1000}s...`)
-      await new Promise(r => setTimeout(r, delay))
-      return captureSnapshot(tenantId, pontoId, eventoId, attempt + 1)
-    }
-    console.error('[snapshot] Falha definitiva após 4 tentativas:', err)
-  }
-}
 
 async function resolveOperadorId(tenantId: string, valor: string | undefined): Promise<string | null> {
   if (!valor) return null
@@ -215,7 +189,6 @@ export async function getConfig(ctx: AgentContext) {
       include: {
         operadores:  { where: { ativo: true }, select: { id: true, nome: true, telefone: true, codigo: true } },
         supervisores: { where: { ativo: true }, select: { id: true, nome: true, codigo: true } },
-        cameras:    { where: { ativa: true }, select: { id: true, deviceSerial: true, deviceName: true, channelNo: true } },
         tenant:     { select: { id: true, nome: true } },
       },
     }),
@@ -278,7 +251,6 @@ export async function getConfig(ctx: AgentContext) {
     abertura: buildAberturaConfig(configAbertura),
     fechamento: buildFechamentoConfig(configAbertura),
     statusLojaHoje: buildStatusLojaHoje(configAbertura, registroHoje),
-    cameras: ponto.cameras,
     canalAlerta: ponto.canalAlerta ?? 'WHATSAPP',
     empresa: { id: ponto.tenant.id, nome: ponto.tenant.nome },
     serverTime: nowLocal(),
@@ -402,8 +374,6 @@ export async function registrarCheckin(ctx: AgentContext, body: { operadorId?: s
     },
   })
 
-  void captureSnapshot(ctx.tenantId, ctx.pontoId, eventoCheckin.id)
-
   // Realtime update
   try {
     getIO().to(`tenant:${ctx.tenantId}`).emit('checkin:recebido', {
@@ -457,9 +427,6 @@ export async function dispararPanico(ctx: AgentContext, body: {
     },
   })
 
-  // Capture snapshot asynchronously — do not await so panic fires immediately
-  void captureSnapshot(ctx.tenantId, ctx.pontoId, evento.id)
-
   const ponto = await prisma.ponto.findUnique({ where: { id: ctx.pontoId }, select: { nome: true, canalAlerta: true } })
   const canal = ponto?.canalAlerta ?? 'WHATSAPP'
 
@@ -500,8 +467,6 @@ export async function registrarFalha(ctx: AgentContext, body: { observacao?: str
       },
     },
   })
-
-  void captureSnapshot(ctx.tenantId, ctx.pontoId, evento.id)
 
   await notificacaoQueue.add('falha', {
     tenantId: ctx.tenantId, pontoId: ctx.pontoId, eventoId: evento.id,

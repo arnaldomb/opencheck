@@ -10,7 +10,6 @@ COPY packages/database/package.json    ./packages/database/
 COPY packages/shared/package.json      ./packages/shared/
 COPY packages/ui/package.json          ./packages/ui/
 COPY packages/asaas-sdk/package.json   ./packages/asaas-sdk/
-COPY packages/ezviz-sdk/package.json   ./packages/ezviz-sdk/
 COPY packages/ctrlsafe-sdk/package.json ./packages/ctrlsafe-sdk/
 RUN pnpm install --frozen-lockfile
 

@@ -32,38 +32,6 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: opencheck_minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    volumes:
-      - minio_data:/data
-    networks:
-      - internal
-      - proxy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.http.routers.opencheck-storage.rule=Host(`storage.opencheck.ggtronic.com.br`)"
-      - "traefik.http.routers.opencheck-storage.entrypoints=websecure"
-      - "traefik.http.routers.opencheck-storage.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.opencheck-storage.service=opencheck-storage"
-      - "traefik.http.services.opencheck-storage.loadbalancer.server.port=9000"
-      - "traefik.http.routers.opencheck-storage-console.rule=Host(`storage-console.opencheck.ggtronic.com.br`)"
-      - "traefik.http.routers.opencheck-storage-console.entrypoints=websecure"
-      - "traefik.http.routers.opencheck-storage-console.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.opencheck-storage-console.service=opencheck-storage-console"
-      - "traefik.http.services.opencheck-storage-console.loadbalancer.server.port=9001"
-
   migrate:
     image: ghcr.io/arnaldomb/opencheck-migrate:latest
     restart: "no"
@@ -98,11 +66,6 @@ services:
       ASAAS_SANDBOX: ${ASAAS_SANDBOX}
       ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN}
       CTRLSAFE_API_URL: ${CTRLSAFE_API_URL}
-      EZVIZ_APP_KEY: ${EZVIZ_APP_KEY}
-      EZVIZ_APP_SECRET: ${EZVIZ_APP_SECRET}
-      EZVIZ_REGION: ${EZVIZ_REGION}
-      EZVIZ_AUTH_URL: ${EZVIZ_AUTH_URL}
-      EZVIZ_API_URL: ${EZVIZ_API_URL}
       EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
@@ -111,17 +74,10 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       EMAIL_FROM: ${EMAIL_FROM}
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_URL: https://storage.opencheck.ggtronic.com.br
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: snapshots
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -164,4 +120,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  minio_data:

@@ -38,7 +38,7 @@ async function main() {
         id: 'plano-starter', nome: 'Starter',
         descricao: 'Ideal para pequenas empresas',
         pontosIncluidos: 3, valorMensal: 199.9, valorAnual: 1999.0,
-        limiteCameras: 5, limiteUsuarios: 5,
+        limiteUsuarios: 5,
       },
     }),
     prisma.plano.upsert({
@@ -47,7 +47,7 @@ async function main() {
         id: 'plano-profissional', nome: 'Profissional',
         descricao: 'Para empresas em crescimento',
         pontosIncluidos: 10, valorMensal: 499.9, valorAnual: 4999.0,
-        limiteCameras: 20, limiteUsuarios: 20,
+        limiteUsuarios: 20,
       },
     }),
     prisma.plano.upsert({
@@ -56,7 +56,7 @@ async function main() {
         id: 'plano-enterprise', nome: 'Enterprise',
         descricao: 'Sem limites para grandes operações',
         pontosIncluidos: 50, valorMensal: 1499.9, valorAnual: 14999.0,
-        limiteCameras: 100, limiteUsuarios: 100,
+        limiteUsuarios: 100,
       },
     }),
   ])
@@ -192,7 +192,7 @@ async function main() {
         tenantId: tenant1.id, nome: 'Padrão',
         duracaoMinutos: 30, toleranciaMinutos: 5, avisoAntesMin: 5,
         codigoCheckin: '1602', codigoPanico: '1122', codigoFalha: '1130',
-        capturarSnapshot: true, enviarAvisoWpp: true, autoReiniciar: true, ativo: true,
+        enviarAvisoWpp: true, autoReiniciar: true, ativo: true,
       },
     })
   }

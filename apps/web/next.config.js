@@ -4,11 +4,6 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: [],
   },
-  images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '**.ezvizlife.com' },
-    ],
-  },
 }
 
 module.exports = nextConfig

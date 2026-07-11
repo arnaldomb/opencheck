@@ -12,7 +12,6 @@ import { ciclosRoutes } from './modules/ciclos/ciclos.routes.js'
 import { assinaturasRoutes } from './modules/assinaturas/assinaturas.routes.js'
 import { notificacoesRoutes } from './modules/notificacoes/notificacoes.routes.js'
 import { configuracoesRoutes } from './modules/configuracoes/configuracoes.routes.js'
-import { camerasRoutes } from './modules/cameras/cameras.routes.js'
 import { eventosRoutes } from './modules/eventos/eventos.routes.js'
 import { webhookRoutes } from './modules/webhooks/webhook.routes.js'
 import { operadoresRoutes } from './modules/operadores/operadores.routes.js'
@@ -22,7 +21,6 @@ import { relatoriosRoutes } from './modules/relatorios/relatorios.routes.js'
 import { aberturaRoutes } from './modules/abertura/abertura.routes.js'
 import { initSocket } from './infra/socket/socket.js'
 import { startJobs } from './jobs/index.js'
-import { ensureStorageBucket } from './infra/storage/storage.service.js'
 
 const app = Fastify({
   logger: {
@@ -63,7 +61,6 @@ await app.register(pontosRoutes, { prefix: '/pontos' })
 await app.register(ciclosRoutes, { prefix: '/ciclo' })
 await app.register(notificacoesRoutes, { prefix: '/config/notificacoes' })
 await app.register(configuracoesRoutes, { prefix: '/configuracoes' })
-await app.register(camerasRoutes, { prefix: '/cameras' })
 await app.register(eventosRoutes, { prefix: '/eventos' })
 await app.register(operadoresRoutes, { prefix: '/operadores' })
 await app.register(supervisoresRoutes, { prefix: '/supervisores' })
@@ -78,7 +75,6 @@ await app.listen({ port, host })
 
 initSocket(app.server)
 
-await ensureStorageBucket().catch(err => console.warn('[storage] MinIO not ready:', err.message))
 await startJobs()
 
 app.log.info(`API rodando em http://${host}:${port}`)

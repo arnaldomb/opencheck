@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
-import { useFeatures } from '@/lib/useFeatures'
 import {
-  MapPin, ArrowLeft, Save, Trash2, Loader2, Shield, Camera,
+  MapPin, ArrowLeft, Save, Trash2, Loader2, Shield,
   Key, Copy, RefreshCw, Plus, Check, CheckCircle2, X, AlarmClock, Bell,
   LogOut,
 } from 'lucide-react'
@@ -19,7 +18,6 @@ interface Ponto {
   ctrlsafeLicenseKey?: string; ctrlsafeAgentToken?: string; ctrlsafeInstallId?: string
 }
 interface Operador { id: string; nome: string; ativo: boolean; pontos?: { id: string; nome: string }[]; codigo?: string }
-interface Cam { id: string; deviceName?: string; deviceSerial: string; ativa: boolean; pontoId?: string }
 interface TurnoAbertura {
   id?: string
   diasSemana: number[]
@@ -139,9 +137,7 @@ export default function PontoDetailPage() {
 
   const [ponto, setPonto]           = useState<Ponto | null>(null)
   const [operadores, setOperadores] = useState<Operador[]>([])
-  const [cameras, setCameras]       = useState<Cam[]>([])
   const [loading, setLoading]       = useState(true)
-  const features = useFeatures()
   const [ctrlEnabled, setCtrlEnabled] = useState(false)
 
   const [saving, setSaving]         = useState(false)
@@ -182,10 +178,9 @@ export default function PontoDetailPage() {
     Promise.all([
       apiFetch<Ponto>(`/pontos/${id}`),
       apiFetch<Operador[]>('/operadores').catch(() => []),
-      apiFetch<Cam[]>('/cameras').catch(() => []),
       apiFetch<{ alertarPorCtrlSafe: boolean }>('/configuracoes/notificacoes').catch(() => ({ alertarPorCtrlSafe: false })),
       apiFetch<ConfigAberturaData>(`/abertura/config/${id}`).catch(() => null),
-    ]).then(([pt, vigs, cams, notif, abertura]) => {
+    ]).then(([pt, vigs, notif, abertura]) => {
       const p = pt as Ponto
       setPonto(p)
       setForm({
@@ -206,7 +201,6 @@ export default function PontoDetailPage() {
       setLicenseKey(p.ctrlsafeLicenseKey ?? '')
       setCtrlEnabled((notif as { alertarPorCtrlSafe: boolean }).alertarPorCtrlSafe)
       setOperadores((vigs as Operador[]).filter(v => v.ativo))
-      setCameras((cams as Cam[]).filter(c => c.ativa && c.pontoId === id))
       if (abertura) setAberturaConfig(abertura as ConfigAberturaData)
       setLoading(false)
     }).catch(() => { setLoading(false); setErro('Ponto não encontrado') })
@@ -703,26 +697,6 @@ export default function PontoDetailPage() {
         })()}
       </div>
 
-      {/* Câmeras */}
-      {(features.camerasHabilitadas || cameras.length > 0) && (
-        <div className="card">
-          <h2 className="font-heading font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <Camera className="h-5 w-5 text-ggtech-blue" /> Câmeras vinculadas
-          </h2>
-          {cameras.length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhuma câmera vinculada a este ponto.</p>
-          ) : (
-            <div className="space-y-2">
-              {cameras.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-800">{c.deviceName ?? c.deviceSerial}</span>
-                  <span className="text-xs font-mono text-gray-400">{c.deviceSerial}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

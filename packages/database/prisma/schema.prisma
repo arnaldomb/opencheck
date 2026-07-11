@@ -30,7 +30,6 @@ model Plano {
   pontosIncluidos Int
   valorMensal     Decimal  @db.Decimal(10, 2)
   valorAnual      Decimal? @db.Decimal(10, 2)
-  limiteCameras   Int      @default(5)
   limiteUsuarios  Int      @default(10)
   ativo           Boolean  @default(true)
   criadoEm       DateTime @default(now())
@@ -50,12 +49,10 @@ model Tenant {
   telefone     String?
   ativo               Boolean  @default(true)
   onboardingOk        Boolean  @default(false)
-  camerasHabilitadas  Boolean  @default(true)
   criadoEm   DateTime @default(now())
 
   usuarios              Usuario[]
   pontos                Ponto[]
-  cameras               Camera[]
   operadores            Operador[]
   supervisores          Supervisor[]
   assinatura            Assinatura?
@@ -155,7 +152,6 @@ model Ponto {
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   operadores          Operador[]           @relation("OperadorPontos")
   supervisores        Supervisor[]         @relation("SupervisorPontos")
-  cameras             Camera[]
   eventos             Evento[]
   configCiclo         ConfigCiclo?
   execucoes           ExecucaoCiclo[]
@@ -310,31 +306,6 @@ model RegistroAbertura {
 // CÂMERAS EZVIZ
 // ─────────────────────────────────────
 
-model Camera {
-  id           String   @id @default(cuid())
-  tenantId     String
-  pontoId      String?
-  deviceSerial String
-  deviceName   String?
-  channelNo    Int      @default(1)
-  ativa        Boolean  @default(true)
-  criadoEm   DateTime @default(now())
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ponto     Ponto?     @relation(fields: [pontoId], references: [id])
-  snapshots Snapshot[]
-}
-
-model Snapshot {
-  id         String   @id @default(cuid())
-  cameraId   String
-  eventoId   String?
-  imageUrl   String
-  criadoEm DateTime @default(now())
-
-  camera Camera @relation(fields: [cameraId], references: [id])
-}
-
 // ─────────────────────────────────────
 // CICLOS DE ALERTA
 // ─────────────────────────────────────
@@ -353,7 +324,6 @@ model ConfigCiclo {
   codigoPanico      String   @default("1122")
   codigoFalha       String   @default("1130")
 
-  capturarSnapshot  Boolean  @default(true)
   enviarAvisoWpp    Boolean  @default(true)
   autoReiniciar     Boolean  @default(true)
   ativo             Boolean  @default(true)
@@ -377,7 +347,6 @@ model ExecucaoCiclo {
   status       CicloStatus @default(EM_ANDAMENTO)
   checkinEm    DateTime?
   alertaEm     DateTime?
-  snapshotId   String?
 
   avisoJobId  String?
   expiraJobId String?
@@ -430,7 +399,6 @@ model Evento {
   canal       CanalAlerta?
   encaminhado Boolean     @default(false)
   monitorado  Boolean     @default(false)
-  snapshotId  String?
   ocorridoEm  DateTime    @default(now())
   criadoEm   DateTime    @default(now())
   meta        Json?

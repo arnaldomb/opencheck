@@ -2,8 +2,6 @@ import { Worker } from 'bullmq'
 import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
 import { cicloAlertaQueue } from '../infra/redis/queues.js'
-import { getEzvizClient } from '../infra/ezviz/ezviz.factory.js'
-import { uploadFromUrl } from '../infra/storage/storage.service.js'
 
 export function cicloAlertaWorker(): void {
   new Worker('ciclo-alerta', async (job) => {
@@ -13,22 +11,7 @@ export function cicloAlertaWorker(): void {
       const execucao = await prisma.execucaoCiclo.findUnique({ where: { id: execucaoId } })
       if (!execucao || execucao.status !== 'EM_ANDAMENTO') return
 
-      // Create evento first so snapshot can reference it
       const evento = await prisma.evento.create({ data: { tenantId, pontoId, tipo: 'FALHA' } })
-
-      // Capturar snapshot
-      try {
-        const cameras = await prisma.camera.findMany({ where: { pontoId, ativa: true }, take: 1 })
-        if (cameras[0]) {
-          const client     = getEzvizClient()
-          const { picUrl } = await client.captureSnapshot(cameras[0].deviceSerial, cameras[0].channelNo)
-          const key        = `${tenantId}/${cameras[0].id}/${Date.now()}.jpg`
-          const imageUrl   = await uploadFromUrl(picUrl, key)
-          await prisma.snapshot.create({ data: { cameraId: cameras[0].id, imageUrl, eventoId: evento.id } })
-        }
-      } catch {
-        // Snapshot falhou — alerta dispara mesmo assim
-      }
 
       await prisma.execucaoCiclo.update({
         where: { id: execucaoId },

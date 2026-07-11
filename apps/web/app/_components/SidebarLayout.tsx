@@ -4,24 +4,21 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  LayoutDashboard, MapPin, Users, Bell, Camera,
-  FileText, Settings, CreditCard, LogOut,
+  LayoutDashboard, MapPin, Users, Bell,
+  FileText, Settings, LogOut,
   Building2, DollarSign, Package, ChevronRight,
   Shield, LayoutGrid, ShieldCheck,
 } from 'lucide-react'
-import { useFeatures } from '@/lib/useFeatures'
 
-const NAV_USER_BASE = [
-  { href: '/overview',      label: 'Visão Geral',    icon: LayoutDashboard, cameras: false },
-  { href: '/sinotico',      label: 'Sinótico',       icon: LayoutGrid,      cameras: false },
-  { href: '/pontos',        label: 'Pontos',         icon: MapPin,          cameras: false },
-  { href: '/operadores',    label: 'Operadores',     icon: Users,           cameras: false },
-  { href: '/supervisores',  label: 'Supervisores',   icon: ShieldCheck,     cameras: false },
-  { href: '/eventos',       label: 'Eventos',        icon: Bell,            cameras: false },
-  { href: '/cameras',       label: 'Câmeras',        icon: Camera,          cameras: true  },
-  { href: '/relatorios',    label: 'Relatórios',     icon: FileText,        cameras: false },
-  { href: '/configuracoes', label: 'Configurações',  icon: Settings,        cameras: false },
-  { href: '/plano',         label: 'Meu Plano',      icon: CreditCard,      cameras: false },
+const NAV_USER = [
+  { href: '/overview',      label: 'Visão Geral',    icon: LayoutDashboard },
+  { href: '/sinotico',      label: 'Sinótico',       icon: LayoutGrid },
+  { href: '/pontos',        label: 'Pontos',         icon: MapPin },
+  { href: '/operadores',    label: 'Operadores',     icon: Users },
+  { href: '/supervisores',  label: 'Supervisores',   icon: ShieldCheck },
+  { href: '/eventos',       label: 'Eventos',        icon: Bell },
+  { href: '/relatorios',    label: 'Relatórios',     icon: FileText },
+  { href: '/configuracoes', label: 'Configurações',  icon: Settings },
 ]
 
 const NAV_SUPERADMIN = [
@@ -41,7 +38,6 @@ export default function SidebarLayout({ children }: Props) {
   const pathname = usePathname()
   const [role, setRole]     = useState<string | null>(null)
   const [tenant, setTenant] = useState<string>('')
-  const features = useFeatures()
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -61,8 +57,7 @@ export default function SidebarLayout({ children }: Props) {
     </div>
   )
 
-  const navUser = NAV_USER_BASE.filter(i => !i.cameras || features.camerasHabilitadas)
-  const nav = role === 'superadmin' ? NAV_SUPERADMIN : navUser
+  const nav = role === 'superadmin' ? NAV_SUPERADMIN : NAV_USER
 
   function isActive(href: string) {
     if (href === '/overview') return pathname === '/overview'

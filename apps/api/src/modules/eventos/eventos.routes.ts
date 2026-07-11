@@ -1,8 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
-import { getEzvizClient } from '../../infra/ezviz/ezviz.factory.js'
-import { uploadFromUrl } from '../../infra/storage/storage.service.js'
 
 const TZ = 'America/Sao_Paulo'
 
@@ -142,24 +140,6 @@ function buildMensagemEventoManual(opts: {
   }
 }
 
-function buildLegendaSnapshotManual(tipo: string, ponto: string, data: Date): string {
-  const tituloPorTipo: Record<string, string> = {
-    CHECKIN: '📎 Evidência da ocorrência: Check-in confirmado',
-    ABERTURA_CHECKIN: '📎 Evidência da ocorrência: Check-in de abertura',
-    PANICO: '📎 Evidência da ocorrência: Alerta de pânico',
-    PANICO_SILENCIOSO: '📎 Evidência da ocorrência: Alerta de pânico silencioso',
-    COACAO: '📎 Evidência da ocorrência: Alerta de coação',
-    ALERTA: '📎 Evidência da ocorrência: Check-in não realizado',
-    ABERTURA_AUSENTE: '📎 Evidência da ocorrência: Abertura fora do horário',
-  }
-
-  return (
-    `${tituloPorTipo[tipo] ?? '📎 Evidência da ocorrência'}\n` +
-    `Unidade: ${ponto}\n` +
-    `Data/Hora: ${dataHoraMensagem(data)}`
-  )
-}
-
 export async function eventosRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
@@ -217,14 +197,6 @@ export async function eventosRoutes(app: FastifyInstance) {
     const operadorMap   = new Map(operadores.map(v => [v.id, v.nome]))
     const supervisorMap = new Map(supervisores.map(s => [s.id, s.nome]))
 
-    // Batch-resolve snapshots
-    const ids = eventos.map(e => e.id)
-    const snapshots = await prisma.snapshot.findMany({
-      where: { eventoId: { in: ids } },
-      select: { eventoId: true, imageUrl: true, id: true },
-    })
-    const snapMap = new Map(snapshots.map(s => [s.eventoId, { id: s.id, imageUrl: s.imageUrl }]))
-
     return eventos.map(e => {
       const metaObj      = e.meta as Record<string, unknown> | null
       const operadorId   = metaObj?.operadorId as string | undefined
@@ -240,7 +212,6 @@ export async function eventosRoutes(app: FastifyInstance) {
 
       return {
         ...e,
-        snapshot:   snapMap.get(e.id) ?? null,
         operador:   ator,
         monitorado: e.monitorado,
       }
@@ -264,26 +235,6 @@ export async function eventosRoutes(app: FastifyInstance) {
     })
 
     return { id, monitorado }
-  })
-
-  // Live stream for the camera at the event's ponto
-  app.get('/:id/stream', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-    const { id } = request.params as { id: string }
-
-    const evento = await prisma.evento.findFirst({ where: { id, tenantId } })
-    if (!evento) return reply.status(404).send({ error: 'Evento não encontrado' })
-    if (!evento.pontoId) return reply.status(400).send({ error: 'Evento sem ponto associado' })
-
-    const cameras = await prisma.camera.findMany({ where: { pontoId: evento.pontoId, ativa: true }, take: 1 })
-    if (!cameras[0]) return reply.status(400).send({ error: 'Nenhuma câmera ativa neste ponto' })
-
-    const client     = getEzvizClient()
-    // protocol=2 returns HLS (.m3u8) on this region
-    const hlsResult  = await client.getLiveStreamUrl(cameras[0].deviceSerial, cameras[0].channelNo, '2')
-    const rtmpResult = await client.getLiveStreamUrl(cameras[0].deviceSerial, cameras[0].channelNo, '3').catch(() => null)
-
-    return { hls: hlsResult.url, rtmp: rtmpResult?.url ?? null, expireTime: hlsResult.expireTime }
   })
 
   // Manual WhatsApp send for an event
@@ -343,11 +294,6 @@ export async function eventosRoutes(app: FastifyInstance) {
       data: evento.ocorridoEm,
       statusAbertura: (meta.statusAbertura as string | undefined) ?? null,
     })
-    const mediaCaption = buildLegendaSnapshotManual(
-      evento.tipo,
-      ponto?.nome ?? 'Ponto',
-      evento.ocorridoEm,
-    )
 
     const candidates = [
       cfg.evolutionInstanceToken ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionInstanceToken, instance: cfg.evolutionInstance } : null,
@@ -360,10 +306,6 @@ export async function eventosRoutes(app: FastifyInstance) {
       for (const evoConfig of candidates) {
         try {
           await sendWhatsAppText(evoConfig, to, text)
-          const snapshot = await prisma.snapshot.findFirst({ where: { eventoId: id } })
-          if (snapshot?.imageUrl) {
-            await sendWhatsAppMedia(evoConfig, to, snapshot.imageUrl, mediaCaption).catch(() => {})
-          }
           return
         } catch (err) {
           const msg = String(err)
@@ -380,27 +322,6 @@ export async function eventosRoutes(app: FastifyInstance) {
 
     await prisma.evento.update({ where: { id }, data: { encaminhado: true } })
     return { ok: true }
-  })
-
-  // Capture snapshot on demand for an event without one
-  app.post('/:id/capturar-snapshot', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-    const { id } = request.params as { id: string }
-
-    const evento = await prisma.evento.findFirst({ where: { id, tenantId } })
-    if (!evento) return reply.status(404).send({ error: 'Evento não encontrado' })
-    if (!evento.pontoId) return reply.status(400).send({ error: 'Evento sem ponto associado' })
-
-    const cameras = await prisma.camera.findMany({ where: { pontoId: evento.pontoId, ativa: true }, take: 1 })
-    if (!cameras[0]) return reply.status(400).send({ error: 'Nenhuma câmera ativa neste ponto' })
-
-    const client     = getEzvizClient()
-    const { picUrl } = await client.captureSnapshot(cameras[0].deviceSerial, cameras[0].channelNo)
-    const key        = `${tenantId}/${cameras[0].id}/${Date.now()}.jpg`
-    const imageUrl   = await uploadFromUrl(picUrl, key)
-    const snapshot   = await prisma.snapshot.create({ data: { cameraId: cameras[0].id, imageUrl, eventoId: id } })
-
-    return { id: snapshot.id, imageUrl }
   })
 
   app.get('/stats', async (request) => {

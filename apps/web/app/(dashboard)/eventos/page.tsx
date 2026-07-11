@@ -1,16 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { apiFetch } from '@/lib/api'
 import {
   Bell, AlertTriangle, CheckCircle, Clock, Filter, X, Shield,
-  User, ChevronDown, ChevronUp, MessageCircle, Eye, EyeOff, CheckCheck, Play, Loader2,
+  User, ChevronDown, ChevronUp, MessageCircle, Eye, EyeOff, CheckCheck, Loader2,
   AlarmClock, RefreshCw, Wrench, XCircle,
 } from 'lucide-react'
 
-interface Snapshot  { id: string; imageUrl: string }
 interface Ator { id: string; nome: string | null; tipo?: 'OPERADOR' | 'SUPERVISOR' }
-interface StreamData { hls: string | null; rtmp: string | null; expireTime?: string }
 
 interface Evento {
   id: string; tipo: string; criadoEm: string; ocorridoEm: string
@@ -20,7 +18,6 @@ interface Evento {
   ponto?:      { nome: string }
   operador?:   Ator | null
   meta?:       { operadorId?: string; supervisorId?: string; codigoEvento?: string; observacao?: string }
-  snapshot:    Snapshot | null
 }
 
 interface OperadorOpt { id: string; nome: string }
@@ -29,6 +26,8 @@ const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: strin
   CHECKIN:           { label: 'Check-in',          badgeCls: 'bg-green-100 text-green-700',   iconCls: 'text-green-500',  icon: CheckCircle },
   ABERTURA_CHECKIN:  { label: 'Abertura',           badgeCls: 'bg-blue-100 text-blue-700',     iconCls: 'text-blue-500',   icon: AlarmClock },
   ABERTURA_AUSENTE:  { label: 'Sem Abertura',       badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: XCircle },
+  FECHAMENTO_CHECKIN:{ label: 'Fechamento',         badgeCls: 'bg-gray-100 text-gray-700',     iconCls: 'text-gray-500',   icon: AlarmClock },
+  FECHAMENTO_AUSENTE:{ label: 'Sem Fechamento',     badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: XCircle },
   FALHA:             { label: 'Falha',              badgeCls: 'bg-orange-100 text-orange-700', iconCls: 'text-orange-500', icon: Clock },
   PANICO:            { label: 'Pânico',             badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: AlertTriangle },
   PANICO_SILENCIOSO: { label: 'Pânico silencioso',  badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: Shield },
@@ -40,95 +39,7 @@ const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: strin
   TESTE:             { label: 'Teste',              badgeCls: 'bg-gray-100 text-gray-500',     iconCls: 'text-gray-300',   icon: Wrench },
 }
 
-function LiveStreamModal({ eventoId, onClose }: { eventoId: string; onClose: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [stream, setStream]   = useState<StreamData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [erro, setErro]       = useState('')
-
-  useEffect(() => {
-    apiFetch<StreamData>(`/eventos/${eventoId}/stream`)
-      .then(setStream)
-      .catch(err => setErro(String(err)))
-      .finally(() => setLoading(false))
-  }, [eventoId])
-
-  useEffect(() => {
-    const video = videoRef.current
-    const url   = stream?.hls
-    if (!video || !url) return
-
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = url
-      video.play().catch(() => {})
-      return
-    }
-
-    let cleanup: (() => void) | undefined
-    import('hls.js').then(({ default: Hls }) => {
-      if (!Hls.isSupported()) { setErro('HLS não suportado neste navegador'); return }
-      const hls = new Hls({ enableWorker: false })
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-      hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) setErro('Erro ao reproduzir stream') })
-      cleanup = () => hls.destroy()
-    })
-    return () => cleanup?.()
-  }, [stream])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <p className="font-semibold text-gray-900">Visualização ao vivo</p>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="h-4 w-4 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="bg-black aspect-video flex items-center justify-center">
-          {loading && (
-            <div className="flex flex-col items-center gap-3 text-white/60">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p className="text-sm">Conectando ao stream…</p>
-            </div>
-          )}
-          {erro && !loading && (
-            <div className="text-center text-white/70 px-6">
-              <p className="text-sm">{erro}</p>
-              {stream?.rtmp && <p className="text-xs mt-2 font-mono break-all text-white/40">{stream.rtmp}</p>}
-            </div>
-          )}
-          {stream?.hls && !erro && (
-            <video ref={videoRef} className="w-full h-full" controls muted playsInline />
-          )}
-        </div>
-
-        {stream?.expireTime && (
-          <div className="px-5 py-2 text-xs text-gray-400 border-t border-gray-100">
-            Stream expira em: {stream.expireTime}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SnapshotModal({ snapshot, onClose }: { snapshot: Snapshot; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute -top-10 right-0 text-white/70 hover:text-white">
-          <X className="h-6 w-6" />
-        </button>
-        <img src={snapshot.imageUrl} alt="Snapshot do evento" className="w-full rounded-xl shadow-2xl" />
-      </div>
-    </div>
-  )
-}
-
-const COL = 'grid-cols-[20px_110px_60px_1fr_1fr_52px_52px_76px_96px_88px]'
+const COL = 'grid-cols-[20px_130px_60px_1fr_1fr_76px_96px_88px]'
 const TZ = 'America/Sao_Paulo'
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: TZ })
 
@@ -136,8 +47,6 @@ export default function EventosPage() {
   const [eventos, setEventos]       = useState<Evento[]>([])
   const [loading, setLoading]       = useState(true)
   const [operadores, setOperadores] = useState<OperadorOpt[]>([])
-  const [snapshotAberto, setSnapshotAberto] = useState<Snapshot | null>(null)
-  const [streamEventoId, setStreamEventoId] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen]       = useState(false)
   const [sending,   setSending]     = useState<string | null>(null)
   const [sendErro,  setSendErro]    = useState('')
@@ -232,6 +141,10 @@ export default function EventosPage() {
                 <option value="CHECKIN">Check-in</option>
                 <option value="ABERTURA_CHECKIN">Abertura</option>
                 <option value="ABERTURA_AUSENTE">Sem Abertura</option>
+                <option value="FECHAMENTO_CHECKIN">Fechamento</option>
+                <option value="FECHAMENTO_AUSENTE">Sem Fechamento</option>
+                <option value="SUPERVISOR_ENTRADA">Ronda — Entrada</option>
+                <option value="SUPERVISOR_SAIDA">Ronda — Saída</option>
                 <option value="FALHA">Falha</option>
                 <option value="PANICO">Pânico</option>
                 <option value="PANICO_SILENCIOSO">Pânico silencioso</option>
@@ -298,8 +211,6 @@ export default function EventosPage() {
               <span>Código</span>
               <span>Ponto</span>
               <span>Operador</span>
-              <span className="text-center">Foto</span>
-              <span className="text-center">Visualizar</span>
               <span className="text-center">WhatsApp</span>
               <span className="text-center">Monitoramento</span>
               <span className="text-right">Data/Hora</span>
@@ -348,34 +259,6 @@ export default function EventosPage() {
                         </>
                       ) : (
                         <span className="text-xs text-gray-300">—</span>
-                      )}
-                    </div>
-
-                    {/* Snapshot */}
-                    <div className="flex justify-center">
-                      {ev.snapshot ? (
-                        <button
-                          onClick={() => setSnapshotAberto(ev.snapshot!)}
-                          className="w-12 h-9 rounded overflow-hidden border border-gray-200 hover:border-ggtech-blue hover:shadow-md transition-all group"
-                          title="Ver captura"
-                        >
-                          <img src={ev.snapshot.imageUrl} alt="snapshot" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                        </button>
-                      ) : <span className="text-xs text-gray-200">—</span>}
-                    </div>
-
-                    {/* Visualizar ao vivo */}
-                    <div className="flex justify-center">
-                      {ev.pontoId ? (
-                        <button
-                          onClick={() => setStreamEventoId(ev.id)}
-                          title="Ver ao vivo"
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-50 hover:bg-ggtech-blue hover:text-white text-gray-400 transition-colors"
-                        >
-                          <Play className="h-3.5 w-3.5" />
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-200">—</span>
                       )}
                     </div>
 
@@ -430,14 +313,6 @@ export default function EventosPage() {
         <div className="fixed bottom-4 right-4 z-50 bg-red-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg max-w-sm">
           {sendErro}
         </div>
-      )}
-
-      {snapshotAberto && (
-        <SnapshotModal snapshot={snapshotAberto} onClose={() => setSnapshotAberto(null)} />
-      )}
-
-      {streamEventoId && (
-        <LiveStreamModal eventoId={streamEventoId} onClose={() => setStreamEventoId(null)} />
       )}
     </div>
   )

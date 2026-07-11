@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
-import { sendWhatsAppText, sendWhatsAppMedia } from '../infra/evogo/evogo.service.js'
+import { sendWhatsAppText } from '../infra/evogo/evogo.service.js'
 import { sendCtrlSafeEvent, CTRLSAFE_EVENT_TYPE } from '../infra/ctrlsafe/ctrlsafe.service.js'
 
 const TZ = 'America/Sao_Paulo'
@@ -42,29 +42,6 @@ function buildMensagemCorporativa(opts: {
     `Responsável: ${op}\n` +
     `Data/Hora: ${dataHoraMensagem()}\n\n` +
     `${fechamento}`
-  )
-}
-
-function buildLegendaSnapshot(opts: {
-  tipo: string
-  ponto: string
-}): string {
-  const { tipo, ponto } = opts
-
-  const tituloPorTipo: Record<string, string> = {
-    CHECKIN: '📎 Evidência da ocorrência: Check-in confirmado',
-    ABERTURA_CHECKIN: '📎 Evidência da ocorrência: Check-in de abertura',
-    PANICO: '📎 Evidência da ocorrência: Alerta de pânico',
-    PANICO_SILENCIOSO: '📎 Evidência da ocorrência: Alerta de pânico silencioso',
-    COACAO: '📎 Evidência da ocorrência: Alerta de coação',
-    ALERTA: '📎 Evidência da ocorrência: Check-in não realizado',
-    ABERTURA_AUSENTE: '📎 Evidência da ocorrência: Abertura fora do horário',
-  }
-
-  return (
-    `${tituloPorTipo[tipo] ?? '📎 Evidência da ocorrência'}\n` +
-    `Unidade: ${ponto}\n` +
-    `Data/Hora: ${dataHoraMensagem()}`
   )
 }
 
@@ -256,31 +233,9 @@ export function notificacaoWorker(): void {
         operador: nomeOperador,
         statusAbertura,
       })
-      const mediaCaption = buildLegendaSnapshot({
-        tipo,
-        ponto: ponto?.nome ?? 'Ponto',
-      })
-
-      // Para eventos críticos aguarda snapshot por até 25s
-      let snapshot = null
-      if (eventoId) {
-        if (PANICO_TIPOS.has(tipo)) {
-          for (let i = 0; i < 5; i++) {
-            snapshot = await prisma.snapshot.findFirst({ where: { eventoId } })
-            if (snapshot?.imageUrl) break
-            await new Promise(r => setTimeout(r, 5_000))
-          }
-        } else {
-          snapshot = await prisma.snapshot.findFirst({ where: { eventoId } })
-        }
-      }
-
       if (wppCfg!.whatsappDestino) {
         try {
           await sendWhatsAppText(evoConfig, wppCfg!.whatsappDestino, text)
-          if (snapshot?.imageUrl) {
-            await sendWhatsAppMedia(evoConfig, wppCfg!.whatsappDestino, snapshot.imageUrl, mediaCaption).catch(() => {})
-          }
           console.info(`[notif] WhatsApp → número ${wppCfg!.whatsappDestino} — tipo: ${tipo}`)
         } catch (err) {
           console.error('[notif] Falha WhatsApp número:', err)
@@ -290,9 +245,6 @@ export function notificacaoWorker(): void {
       if (wppCfg!.whatsappGrupoJid) {
         try {
           await sendWhatsAppText(evoConfig, wppCfg!.whatsappGrupoJid, text)
-          if (snapshot?.imageUrl) {
-            await sendWhatsAppMedia(evoConfig, wppCfg!.whatsappGrupoJid, snapshot.imageUrl, mediaCaption).catch(() => {})
-          }
           console.info(`[notif] WhatsApp → grupo ${wppCfg!.whatsappGrupoJid} — tipo: ${tipo}`)
         } catch (err) {
           console.error('[notif] Falha WhatsApp grupo:', err)

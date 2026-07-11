@@ -5,47 +5,6 @@ import { authMiddleware } from '../../middleware/auth.middleware.js'
 export async function configuracoesRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
-  // ── Feature flags do tenant ───────────────────────────────────────────────
-  app.get('/features', async (request) => {
-    const { tenantId } = request.user as { tenantId: string }
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { camerasHabilitadas: true },
-    })
-    return { camerasHabilitadas: tenant?.camerasHabilitadas ?? true }
-  })
-
-  // ── Câmeras EZVIZ ──────────────────────────────────────────────────────────
-
-  app.get('/cameras', async (request) => {
-    const { tenantId } = request.user as { tenantId: string }
-    return prisma.camera.findMany({
-      where: { tenantId, ativa: true },
-      include: { ponto: { select: { id: true, nome: true } } },
-      orderBy: { criadoEm: 'asc' },
-    })
-  })
-
-  app.post('/cameras', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-    const body = request.body as { deviceSerial: string; deviceName?: string; channelNo?: number; pontoId?: string }
-    if (!body.deviceSerial?.trim()) return reply.status(400).send({ error: 'Serial do dispositivo é obrigatório' })
-    const camera = await prisma.camera.create({
-      data: { tenantId, ...body },
-      include: { ponto: { select: { id: true, nome: true } } },
-    })
-    return reply.status(201).send(camera)
-  })
-
-  app.delete('/cameras/:id', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-    const { id } = request.params as { id: string }
-    const camera = await prisma.camera.findFirst({ where: { id, tenantId } })
-    if (!camera) return reply.status(404).send({ error: 'Câmera não encontrada' })
-    await prisma.camera.update({ where: { id }, data: { ativa: false } })
-    return { success: true }
-  })
-
   // ── Notificações ──────────────────────────────────────────────────────────
 
   app.get('/notificacoes', async (request) => {
