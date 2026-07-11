@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle,
-  Plus, X, Save, Loader2, KeyRound, Power, User,
+  Plus, X, Save, Loader2, KeyRound, Power, User, MessageCircle, Trash2,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -24,6 +24,15 @@ interface UsuarioTenant {
   id: string; nome: string; email: string
   papel: 'SUPERADMIN' | 'ADMIN' | 'OPERADOR'
   ativo: boolean; criadoEm: string
+}
+
+interface WhatsappInfo {
+  vinculada: boolean
+  instanceId?: string
+  tokenMask?: string | null
+  temClientToken?: boolean
+  status?: string
+  grupoNome?: string | null
 }
 
 const STATUS_MAP: Record<string, { label: string; Icon: React.ElementType; cls: string }> = {
@@ -50,7 +59,15 @@ export default function ClienteDetailPage() {
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
   const [usuarios, setUsuarios]   = useState<UsuarioTenant[]>([])
   const [loading, setLoading]     = useState(true)
-  const [tab, setTab]             = useState<'geral' | 'usuarios' | 'assinatura' | 'cobrancas'>('geral')
+  const [tab, setTab]             = useState<'geral' | 'usuarios' | 'whatsapp' | 'assinatura' | 'cobrancas'>('geral')
+
+  // WhatsApp (Z-API)
+  const [wpp, setWpp]             = useState<WhatsappInfo>({ vinculada: false })
+  const [wppForm, setWppForm]     = useState({ instanceId: '', token: '', clientToken: '' })
+  const [salvandoWpp, setSalvandoWpp] = useState(false)
+  const [removendoWpp, setRemovendoWpp] = useState(false)
+  const [erroWpp, setErroWpp]     = useState('')
+  const [okWpp, setOkWpp]         = useState('')
 
   // Usuários — estado de gestão
   const [modalUsuario, setModalUsuario] = useState(false)
@@ -72,13 +89,52 @@ export default function ClienteDetailPage() {
       fetch(`${API}/superadmin/clientes/${id}`, { headers: auth() }).then(r => r.json()),
       fetch(`${API}/superadmin/clientes/${id}/assinatura/cobrancas`, { headers: auth() }).then(r => r.json()).catch(() => []),
       fetch(`${API}/superadmin/clientes/${id}/usuarios`, { headers: auth() }).then(r => r.json()).catch(() => []),
-    ]).then(([t, cob, users]) => {
+      fetch(`${API}/superadmin/clientes/${id}/whatsapp`, { headers: auth() }).then(r => r.json()).catch(() => ({ vinculada: false })),
+    ]).then(([t, cob, users, wppInfo]) => {
       setTenant(t)
       setCobrancas(Array.isArray(cob) ? cob : [])
       setUsuarios(Array.isArray(users) ? users : [])
+      setWpp(wppInfo?.vinculada ? wppInfo : { vinculada: false })
       setLoading(false)
     })
   }, [id])
+
+  async function salvarWhatsapp(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvandoWpp(true); setErroWpp(''); setOkWpp('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/whatsapp`, {
+        method: 'PUT',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceId:  wppForm.instanceId,
+          token:       wppForm.token,
+          clientToken: wppForm.clientToken || undefined,
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? `Erro ${res.status}`)
+      setOkWpp(`Instância vinculada — status: ${body?.status ?? 'DESCONECTADO'}`)
+      setWppForm({ instanceId: '', token: '', clientToken: '' })
+      const info = await fetch(`${API}/superadmin/clientes/${id}/whatsapp`, { headers: auth() }).then(r => r.json())
+      setWpp(info?.vinculada ? info : { vinculada: false })
+    } catch (err) {
+      setErroWpp(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSalvandoWpp(false)
+    }
+  }
+
+  async function removerWhatsapp() {
+    if (!confirm('Remover o vínculo da instância WhatsApp deste cliente? O cliente deixará de receber notificações.')) return
+    setRemovendoWpp(true); setErroWpp(''); setOkWpp('')
+    try {
+      await fetch(`${API}/superadmin/clientes/${id}/whatsapp`, { method: 'DELETE', headers: auth() })
+      setWpp({ vinculada: false })
+    } finally {
+      setRemovendoWpp(false)
+    }
+  }
 
   async function toggleAtivo() {
     if (!tenant) return
@@ -165,6 +221,7 @@ export default function ClienteDetailPage() {
   const TABS = [
     { key: 'geral',       label: 'Geral' },
     { key: 'usuarios',    label: `Usuários (${usuarios.length})` },
+    { key: 'whatsapp',    label: 'WhatsApp' },
     { key: 'assinatura',  label: 'Assinatura' },
     { key: 'cobrancas',   label: 'Cobranças' },
   ] as const
@@ -341,6 +398,91 @@ export default function ClienteDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Tab: WhatsApp (Z-API) */}
+      {tab === 'whatsapp' && (
+        <div className="space-y-4 max-w-xl">
+          {wpp.vinculada ? (
+            <div className="card space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-green-600" />
+                  <h3 className="font-heading font-semibold text-gray-800">Instância vinculada</h3>
+                </div>
+                <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                  wpp.status === 'CONECTADO' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {wpp.status === 'CONECTADO' ? 'Conectado' : 'Aguardando conexão do cliente'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-400 text-xs">ID da instância</p>
+                  <p className="font-mono text-gray-800 break-all">{wpp.instanceId}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs">Token</p>
+                  <p className="font-mono text-gray-800">{wpp.tokenMask ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs">Client-Token</p>
+                  <p className="text-gray-800">{wpp.temClientToken ? 'Definido (do cliente)' : 'Usando o global do servidor'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs">Grupo de alertas</p>
+                  <p className="text-gray-800">{wpp.grupoNome ?? 'Não selecionado pelo cliente'}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                O cliente conecta o aparelho e escolhe o grupo em <strong>Configurações → Notificações</strong> no painel dele.
+              </p>
+              <button
+                onClick={removerWhatsapp}
+                disabled={removendoWpp}
+                className="btn-ghost text-red-500 hover:bg-red-50 flex items-center gap-2 text-sm"
+              >
+                {removendoWpp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Remover vínculo
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={salvarWhatsapp} className="card space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                <MessageCircle className="h-4 w-4 text-green-600" />
+                <h3 className="font-heading font-semibold text-gray-800">Vincular instância Z-API</h3>
+              </div>
+              <p className="text-sm text-gray-500">
+                Crie a instância no painel Z-API e cole aqui o <strong>ID</strong> e o <strong>Token</strong> da instância.
+                As credenciais são validadas na Z-API antes de salvar.
+              </p>
+              <div>
+                <label className="label">ID da instância *</label>
+                <input className="input font-mono" required value={wppForm.instanceId}
+                  onChange={e => setWppForm(f => ({ ...f, instanceId: e.target.value }))}
+                  placeholder="3F5F7A3E92FAC19597F8…" />
+              </div>
+              <div>
+                <label className="label">Token da instância *</label>
+                <input className="input font-mono" required value={wppForm.token}
+                  onChange={e => setWppForm(f => ({ ...f, token: e.target.value }))}
+                  placeholder="A101FC3F7999C9A215E3…" />
+              </div>
+              <div>
+                <label className="label">Client-Token (segurança da conta)</label>
+                <input className="input font-mono" value={wppForm.clientToken}
+                  onChange={e => setWppForm(f => ({ ...f, clientToken: e.target.value }))}
+                  placeholder="Opcional — usa o global do servidor se vazio" />
+              </div>
+              {erroWpp && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroWpp}</div>}
+              <button type="submit" disabled={salvandoWpp} className="btn-primary flex items-center gap-2">
+                {salvandoWpp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {salvandoWpp ? 'Validando na Z-API...' : 'Vincular instância'}
+              </button>
+            </form>
+          )}
+          {okWpp && <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-700">{okWpp}</div>}
         </div>
       )}
 

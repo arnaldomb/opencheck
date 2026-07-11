@@ -1,19 +1,14 @@
-import { randomUUID } from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 import {
-  getEvoGoServerConfig,
-  buildInstanceName,
-  createInstance,
-  connectInstance,
-  getInstanceQR,
-  getInstanceStatus,
+  getStatus,
+  getQrCodeImage,
   listGroups,
-  listInstances,
-  logoutInstance,
-  deleteInstance,
-} from '../../infra/evogo/evogo.service.js'
+  sendWhatsAppText,
+  zapiConfigFrom,
+} from '../../infra/zapi/zapi.service.js'
+// (instância gerenciada pelo superadmin — ver superadmin.routes.ts)
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -21,58 +16,16 @@ async function getWppCfg(tenantId: string) {
   return prisma.configNotificacao.findFirst({
     where: { tenantId, tipo: 'WHATSAPP' },
     select: {
-      evolutionUrl: true,
-      evolutionApiKey: true,
-      evolutionInstance: true,
-      evolutionInstanceToken: true,
+      ativo: true,
+      zapiInstanceId: true,
+      zapiToken: true,
+      zapiClientToken: true,
       whatsappInstStatus: true,
+      whatsappDestino: true,
       whatsappGrupoJid: true,
       whatsappGrupoNome: true,
     },
   })
-}
-
-function serverFromCfg(cfg: { evolutionUrl: string | null; evolutionApiKey: string | null }) {
-  if (!cfg.evolutionUrl || !cfg.evolutionApiKey) return null
-  return { url: cfg.evolutionUrl, apiKey: cfg.evolutionApiKey }
-}
-
-function instanceServersFromCfg(cfg: {
-  evolutionUrl: string | null
-  evolutionApiKey: string | null
-  evolutionInstanceToken: string | null
-}) {
-  if (!cfg.evolutionUrl) return []
-  const list = [
-    cfg.evolutionApiKey ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionApiKey } : null,
-    cfg.evolutionInstanceToken ? { url: cfg.evolutionUrl, apiKey: cfg.evolutionInstanceToken } : null,
-  ].filter(Boolean) as Array<{ url: string; apiKey: string }>
-
-  const seen = new Set<string>()
-  return list.filter(s => {
-    const key = `${s.url}|${s.apiKey}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-async function tryWithServers<T>(
-  servers: Array<{ url: string; apiKey: string }>,
-  fn: (server: { url: string; apiKey: string }) => Promise<T>,
-) {
-  let lastErr: unknown = null
-  for (const server of servers) {
-    try {
-      return await fn(server)
-    } catch (err) {
-      const msg = String(err)
-      const authErr = msg.includes('401') || msg.includes('403') || msg.includes('not authorized')
-      if (!authErr) throw err
-      lastErr = err
-    }
-  }
-  throw lastErr ?? new Error('Falha ao autenticar no servidor WhatsApp.')
 }
 
 // ─── rotas ───────────────────────────────────────────────────────────────────
@@ -113,163 +66,68 @@ export async function notificacoesRoutes(app: FastifyInstance) {
   })
 
   // ════════════════════════════════════════════════════════════════════════════
-  // Gestão de instância WhatsApp por tenant
+  // Instância WhatsApp (Z-API)
+  //
+  // As credenciais da instância (instanceId + token) são cadastradas pelo
+  // superadmin e vinculadas à empresa em /superadmin/clientes/:id/whatsapp.
+  // Aqui o cliente apenas: lê o QR, acompanha o status, escolhe o grupo e o
+  // número que recebem as notificações e envia mensagem de teste.
   // ════════════════════════════════════════════════════════════════════════════
 
-  // ── POST /whatsapp/instancia — criar instância no EvoGo ──────────────────
-  app.post('/whatsapp/instancia', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-
-    const server = getEvoGoServerConfig()
-    if (!server) return reply.status(503).send({ error: 'Servidor WhatsApp não configurado no servidor.' })
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { nome: true },
-    })
-    if (!tenant) return reply.status(404).send({ error: 'Tenant não encontrado.' })
-
-    // Se já existe instância, retorna sem recriar
-    const existing = await getWppCfg(tenantId)
-    if (existing?.evolutionInstance) {
-      return {
-        instanceName: existing.evolutionInstance,
-        status: existing.whatsappInstStatus ?? 'DESCONECTADO',
-        jaExistia: true,
-      }
-    }
-
-    const instanceName = buildInstanceName(tenant.nome, tenantId)
-    let token: string = randomUUID()
-
-    try {
-      await createInstance(server, instanceName, token)
-    } catch (err) {
-      const msg = String(err)
-      if (!msg.includes('already exists')) throw err
-
-      await logoutInstance(server, instanceName).catch(() => {})
-      await deleteInstance(server, instanceName).catch(() => {})
-
-      token = randomUUID()
-      try {
-        await createInstance(server, instanceName, token)
-      } catch (err2) {
-        const msg2 = String(err2)
-        if (!msg2.includes('already exists')) throw err2
-        const all = await listInstances(server)
-        const existing = all.find(i => i.name === instanceName)
-        if (!existing) throw err2
-        token = existing.token
-      }
-    }
-
-    await prisma.configNotificacao.upsert({
-      where:  { tenantId_tipo: { tenantId, tipo: 'WHATSAPP' } },
-      update: {
-        evolutionUrl:           server.url,
-        evolutionApiKey:        server.apiKey,
-        evolutionInstance:      instanceName,
-        evolutionInstanceToken: token,
-        whatsappInstStatus:     'DESCONECTADO',
-      },
-      create: {
-        tenantId,
-        tipo:                   'WHATSAPP',
-        ativo:                  false,
-        whatsappEventos:        [],
-        evolutionUrl:           server.url,
-        evolutionApiKey:        server.apiKey,
-        evolutionInstance:      instanceName,
-        evolutionInstanceToken: token,
-        whatsappInstStatus:     'DESCONECTADO',
-      },
-    })
-
-    return { instanceName, status: 'DESCONECTADO', jaExistia: false }
-  })
-
-  // ── POST /whatsapp/conectar — iniciar conexão e obter QR ──────────────────
-  app.post('/whatsapp/conectar', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-
-    const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return reply.status(400).send({ error: 'Instância não criada. Chame POST /whatsapp/instancia primeiro.' })
-    }
-
-    const servers = instanceServersFromCfg(cfg)
-    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
-
-    const qrData = await tryWithServers(servers, s => connectInstance(s, cfg.evolutionInstance!))
-
-    await prisma.configNotificacao.updateMany({
-      where: { tenantId, tipo: 'WHATSAPP' },
-      data:  { whatsappInstStatus: 'AGUARDANDO_QR' },
-    })
-
-    return { status: 'AGUARDANDO_QR', ...qrData }
-  })
-
-  // ── GET /whatsapp/qr — buscar QR code atual ───────────────────────────────
+  // ── GET /whatsapp/qr — QR code em base64 para conectar o aparelho ─────────
   app.get('/whatsapp/qr', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-
     const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return reply.status(400).send({ error: 'Instância não configurada.' })
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return reply.status(400).send({ error: 'Instância WhatsApp não vinculada. Solicite ao administrador da plataforma.' })
+
+    const status = await getStatus(zapi).catch(() => null)
+    if (status?.connected) {
+      return { status: 'CONECTADO', qrCode: null }
     }
 
-    const servers = instanceServersFromCfg(cfg)
-    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
-
-    return tryWithServers(servers, s => getInstanceQR(s, cfg.evolutionInstance!))
+    const qrCode = await getQrCodeImage(zapi)
+    if (qrCode) {
+      await prisma.configNotificacao.updateMany({
+        where: { tenantId, tipo: 'WHATSAPP' },
+        data:  { whatsappInstStatus: 'AGUARDANDO_QR' },
+      })
+    }
+    return { status: qrCode ? 'AGUARDANDO_QR' : 'DESCONECTADO', qrCode }
   })
 
   // ── GET /whatsapp/status — status da conexão ──────────────────────────────
   app.get('/whatsapp/status', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
-
     const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return { status: 'SEM_INSTANCIA' }
-    }
-
-    const servers = instanceServersFromCfg(cfg)
-    if (servers.length === 0) return { status: cfg.whatsappInstStatus ?? 'DESCONECTADO' }
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return { status: 'SEM_INSTANCIA' }
 
     try {
-      const statusData = await tryWithServers(servers, s => getInstanceStatus(s, cfg.evolutionInstance!))
-      const conectado  = statusData.connected ?? (statusData.state === 'open' || statusData.state === 'connected')
-      const novoStatus = conectado ? 'CONECTADO' : (cfg.whatsappInstStatus ?? 'DESCONECTADO')
+      const status = await getStatus(zapi)
+      const novoStatus = status.connected ? 'CONECTADO' : (cfg!.whatsappInstStatus === 'AGUARDANDO_QR' ? 'AGUARDANDO_QR' : 'DESCONECTADO')
 
-      if (conectado && cfg.whatsappInstStatus !== 'CONECTADO') {
+      if (novoStatus !== cfg!.whatsappInstStatus) {
         await prisma.configNotificacao.updateMany({
           where: { tenantId, tipo: 'WHATSAPP' },
-          data:  { whatsappInstStatus: 'CONECTADO', ativo: true },
+          data:  { whatsappInstStatus: novoStatus, ...(status.connected ? { ativo: true } : {}) },
         })
       }
 
       return {
-        status:       novoStatus,
-        state:        statusData.state,
-        grupoJid:     cfg.whatsappGrupoJid ?? null,
-        grupoNome:    cfg.whatsappGrupoNome ?? null,
+        status:              novoStatus,
+        smartphoneConnected: status.smartphoneConnected ?? null,
+        erro:                status.error ?? null,
+        grupoJid:            cfg!.whatsappGrupoJid ?? null,
+        grupoNome:           cfg!.whatsappGrupoNome ?? null,
+        destino:             cfg!.whatsappDestino ?? null,
       }
-    } catch (err) {
-      // 401/404 = instância não existe mais no EvoGo → atualiza DB
-      const msg = String(err)
-      if (msg.includes('401') || msg.includes('404') || msg.includes('not authorized')) {
-        await prisma.configNotificacao.updateMany({
-          where: { tenantId, tipo: 'WHATSAPP' },
-          data:  { whatsappInstStatus: 'DESCONECTADO' },
-        }).catch(() => {})
-        return { status: 'DESCONECTADO', grupoJid: cfg.whatsappGrupoJid ?? null, grupoNome: cfg.whatsappGrupoNome ?? null }
-      }
+    } catch {
       return {
-        status:    cfg.whatsappInstStatus ?? 'DESCONECTADO',
-        grupoJid:  cfg.whatsappGrupoJid  ?? null,
-        grupoNome: cfg.whatsappGrupoNome ?? null,
+        status:    cfg!.whatsappInstStatus ?? 'DESCONECTADO',
+        grupoJid:  cfg!.whatsappGrupoJid  ?? null,
+        grupoNome: cfg!.whatsappGrupoNome ?? null,
+        destino:   cfg!.whatsappDestino ?? null,
       }
     }
   })
@@ -277,27 +135,18 @@ export async function notificacoesRoutes(app: FastifyInstance) {
   // ── GET /whatsapp/grupos — listar grupos do WhatsApp conectado ────────────
   app.get('/whatsapp/grupos', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-
     const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return reply.status(400).send({ error: 'Instância não configurada.' })
-    }
-    if (cfg.whatsappInstStatus !== 'CONECTADO') {
-      return reply.status(400).send({ error: 'WhatsApp não está conectado. Conecte primeiro.' })
-    }
-
-    const servers = instanceServersFromCfg(cfg)
-    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return reply.status(400).send({ error: 'Credenciais Z-API não configuradas.' })
 
     try {
-      return await tryWithServers(servers, s => listGroups(s, cfg.evolutionInstance!))
+      return await listGroups(zapi)
     } catch (err) {
-      const msg = String(err)
-      const rateLimited = msg.includes('rate-overlimit') || msg.includes('429')
-      if (rateLimited) {
-        return reply.status(429).send({ error: 'Servidor WhatsApp limitou as consultas. Aguarde alguns segundos e tente novamente.' })
+      const msg = String(err instanceof Error ? err.message : err)
+      if (msg.includes('429')) {
+        return reply.status(429).send({ error: 'A Z-API limitou as consultas. Aguarde alguns segundos e tente novamente.' })
       }
-      throw err
+      return reply.status(502).send({ error: `Falha ao listar grupos: ${msg.slice(0, 200)}` })
     }
   })
 
@@ -305,78 +154,43 @@ export async function notificacoesRoutes(app: FastifyInstance) {
   app.put('/whatsapp/grupo', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { grupoJid, grupoNome } = request.body as { grupoJid: string; grupoNome?: string }
-
     if (!grupoJid) return reply.status(400).send({ error: 'grupoJid é obrigatório.' })
 
     await prisma.configNotificacao.updateMany({
       where: { tenantId, tipo: 'WHATSAPP' },
       data:  { whatsappGrupoJid: grupoJid, whatsappGrupoNome: grupoNome ?? null },
     })
-
     return { ok: true, grupoJid, grupoNome: grupoNome ?? null }
   })
 
   // ── DELETE /whatsapp/grupo — desvincular grupo ────────────────────────────
   app.delete('/whatsapp/grupo', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
-
     await prisma.configNotificacao.updateMany({
       where: { tenantId, tipo: 'WHATSAPP' },
       data:  { whatsappGrupoJid: null, whatsappGrupoNome: null },
     })
-
     return { ok: true }
   })
 
-  // ── DELETE /whatsapp/instancia — desconectar e remover instância ──────────
-  app.delete('/whatsapp/instancia', async (request, reply) => {
+  // ── POST /whatsapp/testar — envia mensagem de teste ───────────────────────
+  app.post('/whatsapp/testar', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
-
     const cfg = await getWppCfg(tenantId)
-
-    // Tenta limpar no EvoGo mesmo que a instância não exista (erros ignorados)
-    if (cfg?.evolutionInstance) {
-      const server = serverFromCfg(cfg)
-      if (server) {
-        await logoutInstance(server, cfg.evolutionInstance).catch(() => {})
-        await deleteInstance(server, cfg.evolutionInstance).catch(() => {})
-      }
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return reply.status(400).send({ error: 'Credenciais Z-API não configuradas.' })
+    if (!cfg?.whatsappDestino && !cfg?.whatsappGrupoJid) {
+      return reply.status(400).send({ error: 'Nenhum destino configurado (número ou grupo).' })
     }
 
-    await prisma.configNotificacao.updateMany({
-      where: { tenantId, tipo: 'WHATSAPP' },
-      data:  {
-        evolutionInstance:      null,
-        evolutionInstanceToken: null,
-        whatsappInstStatus:     'DESCONECTADO',
-        whatsappGrupoJid:       null,
-        whatsappGrupoNome:      null,
-        ativo:                  false,
-      },
-    })
-
-    return { ok: true }
-  })
-
-  // ── POST /whatsapp/reconectar — reconectar sem recriar instância ──────────
-  app.post('/whatsapp/reconectar', async (request, reply) => {
-    const { tenantId } = request.user as { tenantId: string }
-
-    const cfg = await getWppCfg(tenantId)
-    if (!cfg?.evolutionInstance) {
-      return reply.status(400).send({ error: 'Instância não criada.' })
+    const text = '✅ *OpenCheck* — Conexão WhatsApp testada com sucesso!'
+    try {
+      if (cfg.whatsappDestino) await sendWhatsAppText(zapi, cfg.whatsappDestino, text)
+      if (cfg.whatsappGrupoJid) await sendWhatsAppText(zapi, cfg.whatsappGrupoJid, text)
+      return { ok: true }
+    } catch (err) {
+      return reply.status(502).send({ error: 'Falha ao enviar mensagem de teste.', details: String(err instanceof Error ? err.message : err).slice(0, 300) })
     }
-
-    const servers = instanceServersFromCfg(cfg)
-    if (servers.length === 0) return reply.status(503).send({ error: 'Config de servidor incompleta.' })
-
-    const qrData = await tryWithServers(servers, s => connectInstance(s, cfg.evolutionInstance!))
-
-    await prisma.configNotificacao.updateMany({
-      where: { tenantId, tipo: 'WHATSAPP' },
-      data:  { whatsappInstStatus: 'AGUARDANDO_QR' },
-    })
-
-    return { status: 'AGUARDANDO_QR', ...qrData }
   })
+
 }

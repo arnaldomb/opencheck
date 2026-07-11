@@ -434,13 +434,13 @@ model ConfigNotificacao {
 
   whatsappDestino        String?
   whatsappEventos        String[] // TipoEvento[] que disparam WhatsApp; vazio = todos
-  whatsappGrupoJid       String?  // JID do grupo WhatsApp para envio de alertas
+  whatsappGrupoJid       String?  // ID do grupo WhatsApp (Z-API: "1203...-group") para envio de alertas
   whatsappGrupoNome      String?  // Nome do grupo (cache para exibição)
   whatsappInstStatus     String?  @default("DESCONECTADO") // DESCONECTADO | AGUARDANDO_QR | CONECTADO
-  evolutionUrl           String?
-  evolutionApiKey        String?
-  evolutionInstance      String?
-  evolutionInstanceToken String?
+  // Z-API — credenciais da instância do cliente
+  zapiInstanceId         String?
+  zapiToken              String?
+  zapiClientToken        String?
 
   ctrlsafeLicenseKey String?
   ctrlsafeAgentToken String?

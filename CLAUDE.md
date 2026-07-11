@@ -38,7 +38,8 @@ Prioridade: Segurança → Isolamento → Auditabilidade → Escalabilidade → 
 - **Validação:** Zod
 - **Realtime:** Socket.io
 - **Pagamentos:** Asaas API v3
-- **Alarmes:** CTRL+SAFE SDK, Evolution API
+- **Alarmes:** CTRL+SAFE SDK
+- **WhatsApp:** Z-API (instância por cliente, vinculada pelo superadmin; Client-Token global via env `ZAPI_CLIENT_TOKEN`)
 - **Infra dev:** Docker Compose (postgres, redis, pgadmin, redis-commander)
 - **Infra prod:** Docker Compose + Traefik v3.2 com HTTPS automático Let's Encrypt
 - **Hospedagem:** Hostinger (gerenciado via MCP `hostinger-mcp`)

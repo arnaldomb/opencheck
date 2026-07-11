@@ -76,10 +76,8 @@ services:
       ASAAS_WEBHOOK_TOKEN: dev_webhook_token
       # CTRL+SAFE
       CTRLSAFE_API_URL: https://api.ctrlsafe.com.br/api/functions/v1
-      # WhatsApp — opcional em dev
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-}
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
-      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
+      # WhatsApp Z-API — Client-Token global da conta (opcional em dev)
+      ZAPI_CLIENT_TOKEN: ${ZAPI_CLIENT_TOKEN:-}
       # E-mail — desativado em dev
       SMTP_HOST: localhost
       SMTP_PORT: "1025"

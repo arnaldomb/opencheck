@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '@opencheck/database'
 import { redisConnection } from '../infra/redis/redis.client.js'
-import { sendWhatsAppText } from '../infra/evogo/evogo.service.js'
+import { sendWhatsAppText, zapiConfigFrom } from '../infra/zapi/zapi.service.js'
 import { sendCtrlSafeEvent, CTRLSAFE_EVENT_TYPE } from '../infra/ctrlsafe/ctrlsafe.service.js'
 
 const TZ = 'America/Sao_Paulo'
@@ -170,10 +170,9 @@ export function notificacaoWorker(): void {
           whatsappDestino:    true,
           whatsappGrupoJid:   true,
           whatsappEventos:    true,
-          evolutionUrl:       true,
-          evolutionApiKey:    true,
-          evolutionInstanceToken: true,
-          evolutionInstance:  true,
+          zapiInstanceId:     true,
+          zapiToken:          true,
+          zapiClientToken:    true,
           whatsappInstStatus: true,
         },
       }),
@@ -214,16 +213,12 @@ export function notificacaoWorker(): void {
     const wppEventos    = wppCfg?.whatsappEventos ?? []
     const tipoFiltro    = tipo === 'ABERTURA_CHECKIN' ? 'CHECKIN' : tipo
     const deveEnviar    = tipo !== 'FALHA' && (wppEventos.length === 0 || wppEventos.includes(tipo) || wppEventos.includes(tipoFiltro))
-    const temInstancia  = wppCfg?.evolutionInstance && wppCfg?.evolutionUrl && (wppCfg?.evolutionInstanceToken || wppCfg?.evolutionApiKey)
+    const zapiCfg       = zapiConfigFrom(wppCfg)
     const estaConectado = wppCfg?.whatsappInstStatus === 'CONECTADO'
     const temDestino    = !!(wppCfg?.whatsappDestino || wppCfg?.whatsappGrupoJid)
 
-    if (temInstancia && estaConectado && deveEnviar && temDestino) {
-      const evoConfig = {
-        url:      wppCfg!.evolutionUrl!,
-        apiKey:   wppCfg!.evolutionInstanceToken ?? wppCfg!.evolutionApiKey!,
-        instance: wppCfg!.evolutionInstance!,
-      }
+    if (zapiCfg && estaConectado && deveEnviar && temDestino) {
+      const evoConfig = zapiCfg
 
       // Usa mensagem customizada (e.g. ABERTURA_AUSENTE do deadline job) ou constrói a padrão
       const text = mensagem ?? buildMensagem({

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import {
   ArrowLeft, Bell, CheckCircle2, Loader2, RefreshCw, Save,
-  Send, Shield, Smartphone, Trash2, Users, Wifi, WifiOff, AlertCircle,
+  Send, Shield, Smartphone, Users, Wifi, WifiOff, AlertCircle, QrCode,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -15,14 +15,14 @@ type InstStatus = 'SEM_INSTANCIA' | 'DESCONECTADO' | 'AGUARDANDO_QR' | 'CONECTAD
 
 interface WppStatus {
   status: InstStatus
-  state?: string
   grupoJid?: string | null
   grupoNome?: string | null
+  destino?: string | null
 }
 
 interface Grupo {
   id: string
-  subject: string
+  nome: string
 }
 
 interface WppConfig {
@@ -42,6 +42,7 @@ interface CtrlConfig {
 const EVENTOS_DISPONIVEIS = [
   { value: 'CHECKIN',           label: '✅ Check-in' },
   { value: 'ABERTURA_AUSENTE',  label: '🔔 Sem Abertura' },
+  { value: 'FECHAMENTO_AUSENTE',label: '🔔 Sem Fechamento' },
   { value: 'PANICO',            label: '🚨 Pânico' },
   { value: 'PANICO_SILENCIOSO', label: '🚨 Pânico Silencioso' },
   { value: 'COACAO',            label: '⚠️ Coação' },
@@ -51,12 +52,10 @@ const EVENTOS_DISPONIVEIS = [
 // ─── componente principal ─────────────────────────────────────────────────────
 
 export default function NotificacoesPage() {
-  // WhatsApp — instância
+  // WhatsApp — conexão (instância Z-API vinculada pelo administrador)
   const [instStatus,   setInstStatus]   = useState<InstStatus>('SEM_INSTANCIA')
   const [qrCode,       setQrCode]       = useState<string | null>(null)
-  const [criando,      setCriando]      = useState(false)
   const [conectando,   setConectando]   = useState(false)
-  const [removendo,    setRemovendo]    = useState(false)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // WhatsApp — grupos
@@ -115,12 +114,7 @@ export default function NotificacoesPage() {
           setGrupoJid(statusRes.grupoJid)
           setGrupoNome(statusRes.grupoNome ?? '')
         }
-
-        // Se está aguardando QR, iniciar polling
-        if (statusRes.status === 'AGUARDANDO_QR') {
-          buscarQR()
-          iniciarPolling()
-        }
+        if (statusRes.status === 'CONECTADO') carregarGrupos()
       } finally {
         setLoading(false)
       }
@@ -130,7 +124,7 @@ export default function NotificacoesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── polling de status ────────────────────────────────────────────────────────
+  // ── polling de status enquanto aguarda o QR ser lido ─────────────────────────
   const iniciarPolling = useCallback(() => {
     pararPolling()
     pollingRef.current = setInterval(async () => {
@@ -143,7 +137,7 @@ export default function NotificacoesPage() {
           if (res.grupoJid) { setGrupoJid(res.grupoJid); setGrupoNome(res.grupoNome ?? '') }
           carregarGrupos()
         } else if (res.status === 'AGUARDANDO_QR') {
-          // Atualiza QR a cada ciclo caso ainda não tenha chegado
+          // QR expira — atualiza periodicamente
           buscarQR()
         }
       } catch { /* ignora erros de polling */ }
@@ -154,117 +148,36 @@ export default function NotificacoesPage() {
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
   }
 
-  // ── buscar QR ────────────────────────────────────────────────────────────────
+  // ── ler QR code ──────────────────────────────────────────────────────────────
   async function buscarQR() {
     try {
-      const res = await apiFetch<{ qrCode?: string; qrURL?: string }>('/config/notificacoes/whatsapp/qr')
-      setQrCode(res.qrCode ?? res.qrURL ?? null)
+      const res = await apiFetch<{ status: InstStatus; qrCode: string | null }>('/config/notificacoes/whatsapp/qr')
+      if (res.status === 'CONECTADO') {
+        setInstStatus('CONECTADO')
+        setQrCode(null)
+        pararPolling()
+        carregarGrupos()
+        return
+      }
+      setQrCode(res.qrCode)
+      if (res.qrCode) setInstStatus('AGUARDANDO_QR')
     } catch { /* QR ainda não disponível */ }
   }
 
-  // ── criar instância ──────────────────────────────────────────────────────────
-  async function criarInstancia() {
-    setCriando(true); setErro('')
-    try {
-      await apiFetch('/config/notificacoes/whatsapp/instancia', { method: 'POST' })
-      await conectar()
-    } catch (err) {
-      setErro(String(err))
-    } finally {
-      setCriando(false)
-    }
-  }
-
-  // ── conectar (gera QR) ───────────────────────────────────────────────────────
   async function conectar() {
     setConectando(true); setErro('')
     try {
-      const res = await apiFetch<{ status: string; qrCode?: string; qrURL?: string }>(
-        '/config/notificacoes/whatsapp/conectar',
-        { method: 'POST' },
-      )
-      const qr = res.qrCode ?? res.qrURL ?? null
-      setInstStatus('AGUARDANDO_QR')
-      setQrCode(qr)
-
-      if (!qr) {
-        // EvoGo pode ter restaurado sessão sem QR — verifica status imediatamente
-        try {
-          const statusRes = await apiFetch<WppStatus>('/config/notificacoes/whatsapp/status')
-          setInstStatus(statusRes.status)
-          if (statusRes.status === 'CONECTADO') {
-            if (statusRes.grupoJid) { setGrupoJid(statusRes.grupoJid); setGrupoNome(statusRes.grupoNome ?? '') }
-            carregarGrupos()
-            return
-          }
-          // Ainda não conectado — tenta buscar QR separadamente
-          buscarQR()
-        } catch { /* ignora */ }
-      }
-
+      await buscarQR()
       iniciarPolling()
     } catch (err) {
       setErro(String(err))
     } finally {
       setConectando(false)
-    }
-  }
-
-  // ── reconectar ───────────────────────────────────────────────────────────────
-  async function reconectar() {
-    setConectando(true); setErro('')
-    try {
-      const res = await apiFetch<{ status: string; qrCode?: string; qrURL?: string }>(
-        '/config/notificacoes/whatsapp/reconectar',
-        { method: 'POST' },
-      )
-      const qr = res.qrCode ?? res.qrURL ?? null
-      setInstStatus('AGUARDANDO_QR')
-      setQrCode(qr)
-
-      if (!qr) {
-        try {
-          const statusRes = await apiFetch<WppStatus>('/config/notificacoes/whatsapp/status')
-          setInstStatus(statusRes.status)
-          if (statusRes.status === 'CONECTADO') {
-            if (statusRes.grupoJid) { setGrupoJid(statusRes.grupoJid); setGrupoNome(statusRes.grupoNome ?? '') }
-            carregarGrupos()
-            return
-          }
-          buscarQR()
-        } catch { /* ignora */ }
-      }
-
-      iniciarPolling()
-    } catch (err) {
-      setErro(String(err))
-    } finally {
-      setConectando(false)
-    }
-  }
-
-  // ── remover instância ────────────────────────────────────────────────────────
-  async function removerInstancia() {
-    if (!confirm('Isso desconectará o WhatsApp e removerá a instância. Confirmar?')) return
-    setRemovendo(true); setErro('')
-    try {
-      await apiFetch('/config/notificacoes/whatsapp/instancia', { method: 'DELETE' })
-      pararPolling()
-      setInstStatus('SEM_INSTANCIA')
-      setQrCode(null)
-      setGrupos([])
-      setGrupoJid('')
-      setGrupoNome('')
-      setWppConfig(c => ({ ...c, ativo: false, whatsappGrupoJid: null, whatsappGrupoNome: null }))
-    } catch (err) {
-      setErro(String(err))
-    } finally {
-      setRemovendo(false)
     }
   }
 
   // ── grupos ───────────────────────────────────────────────────────────────────
-  async function carregarGrupos(tentativas = 3) {
+  async function carregarGrupos(tentativas = 2) {
     setLoadingGrupos(true)
     try {
       for (let i = 0; i < tentativas; i++) {
@@ -397,25 +310,36 @@ export default function NotificacoesPage() {
           <StatusBadge status={instStatus} />
         </div>
 
-        {/* PASSO 1 — Sem instância */}
+        {/* Instância não vinculada — quem vincula é o admin da plataforma */}
         {instStatus === 'SEM_INSTANCIA' && (
+          <div className="flex items-start gap-2 text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5">
+            <AlertCircle className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
+            <span>
+              A instância de WhatsApp da sua empresa ainda não foi vinculada.
+              Entre em contato com o <strong>administrador da plataforma</strong> para ativar o serviço.
+            </span>
+          </div>
+        )}
+
+        {/* Instância vinculada, aparelho não conectado */}
+        {instStatus === 'DESCONECTADO' && (
           <div className="space-y-3">
             <p className="text-sm text-gray-500">
-              Conecte o WhatsApp da sua empresa para receber alertas em tempo real.
+              Instância pronta. Conecte o WhatsApp da sua empresa lendo o QR code.
             </p>
             <button
               type="button"
-              onClick={criarInstancia}
-              disabled={criando}
+              onClick={conectar}
+              disabled={conectando}
               className="btn-primary flex items-center gap-2 py-2 px-4 text-sm"
             >
-              {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
-              {criando ? 'Criando instância...' : 'Configurar WhatsApp'}
+              {conectando ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+              {conectando ? 'Gerando QR...' : 'Ler QR Code'}
             </button>
           </div>
         )}
 
-        {/* PASSO 2 — Aguardando QR */}
+        {/* Aguardando leitura do QR */}
         {instStatus === 'AGUARDANDO_QR' && (
           <div className="space-y-4">
             <div className="flex items-start gap-2 text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
@@ -426,12 +350,7 @@ export default function NotificacoesPage() {
             {qrCode ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="border-4 border-green-500 rounded-xl p-2 bg-white">
-                  {qrCode.startsWith('data:image') || qrCode.startsWith('http') ? (
-                    <Image src={qrCode} alt="QR Code WhatsApp" width={220} height={220} unoptimized />
-                  ) : (
-                    /* base64 sem prefixo */
-                    <Image src={`data:image/png;base64,${qrCode}`} alt="QR Code WhatsApp" width={220} height={220} unoptimized />
-                  )}
+                  <Image src={qrCode} alt="QR Code WhatsApp" width={220} height={220} unoptimized />
                 </div>
                 <p className="text-xs text-gray-400 animate-pulse">Aguardando leitura do QR...</p>
               </div>
@@ -442,21 +361,15 @@ export default function NotificacoesPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <button type="button" onClick={buscarQR} className="btn-outline flex items-center gap-1.5 text-sm py-1.5 px-3">
-                <RefreshCw className="h-3.5 w-3.5" /> Atualizar QR
-              </button>
-              <button type="button" onClick={removerInstancia} disabled={removendo} className="btn-ghost flex items-center gap-1.5 text-sm py-1.5 px-3 text-red-500 hover:text-red-700">
-                <Trash2 className="h-3.5 w-3.5" /> Cancelar
-              </button>
-            </div>
+            <button type="button" onClick={buscarQR} className="btn-outline flex items-center gap-1.5 text-sm py-1.5 px-3">
+              <RefreshCw className="h-3.5 w-3.5" /> Atualizar QR
+            </button>
           </div>
         )}
 
-        {/* PASSO 3 — Conectado */}
+        {/* Conectado — escolher grupo */}
         {instStatus === 'CONECTADO' && (
           <div className="space-y-5">
-            {/* Grupo */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="label flex items-center gap-1.5">
@@ -481,12 +394,12 @@ export default function NotificacoesPage() {
                 onChange={e => {
                   const g = grupos.find(g => g.id === e.target.value)
                   setGrupoJid(e.target.value)
-                  setGrupoNome(g?.subject ?? '')
+                  setGrupoNome(g?.nome ?? '')
                 }}
               >
                 <option value="">Selecione um grupo...</option>
                 {grupos.map(g => (
-                  <option key={g.id} value={g.id}>{g.subject}</option>
+                  <option key={g.id} value={g.id}>{g.nome}</option>
                 ))}
               </select>
 
@@ -511,35 +424,6 @@ export default function NotificacoesPage() {
                   </button>
                 )}
               </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 flex items-center gap-4">
-              <button type="button" onClick={reconectar} disabled={conectando}
-                className="btn-ghost flex items-center gap-1.5 text-sm text-gray-500 py-1">
-                <RefreshCw className="h-3.5 w-3.5" /> Reconectar
-              </button>
-              <button type="button" onClick={removerInstancia} disabled={removendo}
-                className="btn-ghost flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 py-1">
-                <Trash2 className="h-3.5 w-3.5" /> Remover instância
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Desconectado (instância existe mas não está conectada) */}
-        {instStatus === 'DESCONECTADO' && (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500">Instância criada mas não conectada.</p>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={conectar} disabled={conectando}
-                className="btn-primary flex items-center gap-2 py-2 px-4 text-sm">
-                {conectando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wifi className="h-4 w-4" />}
-                {conectando ? 'Conectando...' : 'Conectar WhatsApp'}
-              </button>
-              <button type="button" onClick={removerInstancia} disabled={removendo}
-                className="btn-ghost text-sm text-red-500 hover:text-red-700 flex items-center gap-1">
-                <Trash2 className="h-3.5 w-3.5" /> Remover
-              </button>
             </div>
           </div>
         )}
@@ -679,7 +563,7 @@ export default function NotificacoesPage() {
 
 function StatusBadge({ status }: { status: InstStatus }) {
   const map: Record<InstStatus, { label: string; cls: string; Icon: React.ElementType }> = {
-    SEM_INSTANCIA: { label: 'Não configurado', cls: 'bg-gray-100 text-gray-500',              Icon: WifiOff },
+    SEM_INSTANCIA: { label: 'Não vinculado',   cls: 'bg-gray-100 text-gray-500',              Icon: WifiOff },
     DESCONECTADO:  { label: 'Desconectado',    cls: 'bg-red-100 text-red-600',                Icon: WifiOff },
     AGUARDANDO_QR: { label: 'Aguardando QR',   cls: 'bg-yellow-100 text-yellow-700 animate-pulse', Icon: Loader2 },
     CONECTADO:     { label: 'Conectado',        cls: 'bg-green-100 text-green-700',            Icon: Wifi },

@@ -92,6 +92,104 @@ export async function superadminRoutes(app: FastifyInstance) {
     })
   })
 
+  // ── WhatsApp (Z-API) por cliente ──────────────────────────────────────────
+  // O admin cadastra a instância no painel Z-API e vincula aqui ao cliente.
+
+  app.get('/clientes/:id/whatsapp', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const cfg = await prisma.configNotificacao.findFirst({
+      where: { tenantId: id, tipo: 'WHATSAPP' },
+      select: { zapiInstanceId: true, zapiToken: true, zapiClientToken: true, whatsappInstStatus: true, whatsappGrupoNome: true },
+    })
+    if (!cfg?.zapiInstanceId) return { vinculada: false }
+    return {
+      vinculada:   true,
+      instanceId:  cfg.zapiInstanceId,
+      // token exibido mascarado — a chave completa fica só no banco
+      tokenMask:   cfg.zapiToken ? `${cfg.zapiToken.slice(0, 4)}…${cfg.zapiToken.slice(-4)}` : null,
+      temClientToken: !!cfg.zapiClientToken,
+      status:      cfg.whatsappInstStatus ?? 'DESCONECTADO',
+      grupoNome:   cfg.whatsappGrupoNome ?? null,
+    }
+  })
+
+  app.put('/clientes/:id/whatsapp', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = request.body as { instanceId?: string; token?: string; clientToken?: string }
+    if (!body.instanceId?.trim() || !body.token?.trim()) {
+      return reply.status(400).send({ error: 'ID da instância e token são obrigatórios' })
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { id: true } })
+    if (!tenant) return reply.status(404).send({ error: 'Cliente não encontrado' })
+
+    const { getStatus, zapiConfigFrom } = await import('../../infra/zapi/zapi.service.js')
+    const zapi = zapiConfigFrom({
+      zapiInstanceId:  body.instanceId.trim(),
+      zapiToken:       body.token.trim(),
+      zapiClientToken: body.clientToken?.trim() || null,
+    })!
+
+    // Valida credenciais consultando o status na Z-API
+    let conectado = false
+    try {
+      const status = await getStatus(zapi)
+      conectado = status.connected
+    } catch (err) {
+      return reply.status(400).send({
+        error: `Credenciais inválidas ou instância inacessível na Z-API: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`,
+      })
+    }
+
+    await prisma.configNotificacao.upsert({
+      where:  { tenantId_tipo: { tenantId: id, tipo: 'WHATSAPP' } },
+      update: {
+        zapiInstanceId:     body.instanceId.trim(),
+        zapiToken:          body.token.trim(),
+        zapiClientToken:    body.clientToken?.trim() || null,
+        whatsappInstStatus: conectado ? 'CONECTADO' : 'DESCONECTADO',
+        ...(conectado ? { ativo: true } : {}),
+      },
+      create: {
+        tenantId:           id,
+        tipo:               'WHATSAPP',
+        ativo:              conectado,
+        whatsappEventos:    [],
+        zapiInstanceId:     body.instanceId.trim(),
+        zapiToken:          body.token.trim(),
+        zapiClientToken:    body.clientToken?.trim() || null,
+        whatsappInstStatus: conectado ? 'CONECTADO' : 'DESCONECTADO',
+      },
+    })
+
+    return { ok: true, status: conectado ? 'CONECTADO' : 'DESCONECTADO' }
+  })
+
+  app.delete('/clientes/:id/whatsapp', async (request) => {
+    const { id } = request.params as { id: string }
+    const cfg = await prisma.configNotificacao.findFirst({
+      where: { tenantId: id, tipo: 'WHATSAPP' },
+      select: { zapiInstanceId: true, zapiToken: true, zapiClientToken: true },
+    })
+    const { disconnect, zapiConfigFrom } = await import('../../infra/zapi/zapi.service.js')
+    const zapi = zapiConfigFrom(cfg)
+    if (zapi) await disconnect(zapi).catch(() => {})
+
+    await prisma.configNotificacao.updateMany({
+      where: { tenantId: id, tipo: 'WHATSAPP' },
+      data: {
+        zapiInstanceId:     null,
+        zapiToken:          null,
+        zapiClientToken:    null,
+        whatsappInstStatus: 'DESCONECTADO',
+        whatsappGrupoJid:   null,
+        whatsappGrupoNome:  null,
+        ativo:              false,
+      },
+    })
+    return { ok: true }
+  })
+
   // ── Usuários dos tenants ──────────────────────────────────────────────────
   app.get('/clientes/:id/usuarios', async (request, reply) => {
     const { id } = request.params as { id: string }
