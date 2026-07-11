@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api'
 import {
   MapPin, Users, Bell, AlertTriangle, CheckCircle,
   TrendingUp, Activity, RefreshCw, ShieldAlert, Siren,
-  HandMetal, Cpu, ArrowRight,
+  HandMetal, Cpu, ArrowRight, ShieldCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -17,9 +17,40 @@ interface Evento {
   tipo: string
   ocorridoEm: string
   ponto?: { nome: string }
-  vigilante?: { id: string; nome: string | null } | null
+  operador?: { id: string; nome: string | null; tipo?: 'OPERADOR' | 'SUPERVISOR' } | null
   meta?: Record<string, unknown> | null
   monitorado?: boolean
+}
+
+interface VisitaRonda {
+  supervisorId: string; supervisorNome: string
+  pontoId: string; pontoNome: string
+  entradaEm: string | null; saidaEm: string | null
+  duracaoMinutos: number | null; emAberto: boolean
+}
+
+interface RankingSupervisor {
+  supervisorId: string
+  nome: string
+  visitas: number
+  emAberto: number
+  lojas: string[]
+}
+
+// Agrega visitas dos últimos 7 dias por supervisor, ordenado por nº de visitas
+function rankearRondas(visitas: VisitaRonda[]): RankingSupervisor[] {
+  const porSupervisor = new Map<string, RankingSupervisor>()
+  for (const v of visitas) {
+    let r = porSupervisor.get(v.supervisorId)
+    if (!r) {
+      r = { supervisorId: v.supervisorId, nome: v.supervisorNome, visitas: 0, emAberto: 0, lojas: [] }
+      porSupervisor.set(v.supervisorId, r)
+    }
+    r.visitas++
+    if (v.emAberto) r.emAberto++
+    if (!r.lojas.includes(v.pontoNome)) r.lojas.push(v.pontoNome)
+  }
+  return Array.from(porSupervisor.values()).sort((a, b) => b.visitas - a.visitas)
 }
 
 function StatCard({ label, value, sub, icon: Icon, color }: {
@@ -81,6 +112,7 @@ export default function OverviewPage() {
   const [operadores,  setOperadores]  = useState<Operador[]>([])
   const [evStats,     setEvStats]     = useState<EventoStats | null>(null)
   const [eventos,     setEventos]     = useState<Evento[]>([])
+  const [rondas,      setRondas]      = useState<RankingSupervisor[]>([])
   const [loading,     setLoading]     = useState(true)
   const [refreshing,  setRefreshing]  = useState(false)
   const [lastUpdate,  setLastUpdate]  = useState<Date>(new Date())
@@ -89,16 +121,18 @@ export default function OverviewPage() {
     if (!silent) setLoading(true)
     else         setRefreshing(true)
     try {
-      const [pts, vigs, evs, evList] = await Promise.all([
+      const [pts, vigs, evs, evList, rondasRes] = await Promise.all([
         apiFetch<Ponto[]>('/pontos').catch(() => [] as Ponto[]),
         apiFetch<Operador[]>('/operadores').catch(() => [] as Operador[]),
         apiFetch<EventoStats>('/eventos/stats').catch(() => null),
         apiFetch<Evento[]>('/eventos?limit=15').catch(() => [] as Evento[]),
+        apiFetch<{ visitas: VisitaRonda[] }>('/supervisores/rondas').catch(() => ({ visitas: [] as VisitaRonda[] })),
       ])
       setPontos(pts as Ponto[])
       setOperadores(vigs as Operador[])
       setEvStats(evs as EventoStats | null)
       setEventos(evList as Evento[])
+      setRondas(rankearRondas((rondasRes as { visitas: VisitaRonda[] }).visitas))
       setLastUpdate(new Date())
     } finally {
       setLoading(false)
@@ -138,8 +172,10 @@ export default function OverviewPage() {
         <StatCard label="Total de eventos" value={evStats?.total ?? 0}    icon={TrendingUp}    color="bg-amber-500" />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
       {/* Últimos eventos */}
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden lg:col-span-2">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-ggtech-blue" />
@@ -173,7 +209,7 @@ export default function OverviewPage() {
                 const t         = tipoInfo(ev.tipo)
                 const TipoIcon  = t.icon
                 const alerta    = isAlerta(ev.tipo)
-                const vigNome   = ev.vigilante?.nome ?? null
+                const vigNome   = ev.operador?.nome ?? null
                 const obs       = ev.meta?.observacao as string | undefined
 
                 return (
@@ -225,6 +261,60 @@ export default function OverviewPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Rondas de supervisão — últimos 7 dias */}
+      <div className="card p-0 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-indigo-600" />
+          <h2 className="font-heading font-semibold text-gray-900">Rondas de supervisão</h2>
+          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">7 dias</span>
+        </div>
+
+        {rondas.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
+            <ShieldCheck className="h-8 w-8 text-gray-300" />
+            <p className="text-sm text-center px-6">Nenhuma visita de supervisor nos últimos 7 dias</p>
+          </div>
+        ) : (
+          <>
+            <ul className="divide-y divide-gray-50">
+              {rondas.slice(0, 6).map((r, i) => (
+                <li key={r.supervisorId} className="px-5 py-3.5 flex items-start gap-3 hover:bg-gray-50 transition-colors">
+                  <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                    i === 0 ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
+                  }`}>
+                    {i + 1}º
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{r.nome}</p>
+                    <p className="text-xs text-gray-500 truncate" title={r.lojas.join(', ')}>
+                      <MapPin className="h-3 w-3 inline text-gray-300 mr-0.5" />
+                      {r.lojas.join(', ')}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold text-indigo-600">{r.visitas}</p>
+                    <p className="text-[10px] text-gray-400 leading-tight">
+                      visita{r.visitas !== 1 ? 's' : ''}{r.emAberto > 0 ? ` · ${r.emAberto} em aberto` : ''}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="px-6 py-3 border-t border-gray-50 bg-gray-50/50">
+              <Link
+                href="/supervisores/rondas"
+                className="text-xs text-ggtech-blue hover:underline flex items-center gap-1 w-fit"
+              >
+                Ver todas as rondas <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
+
       </div>
     </div>
   )
