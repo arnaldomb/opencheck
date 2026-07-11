@@ -12,7 +12,6 @@
     { "key": "pontoId",       "value": "",                                          "type": "string", "description": "Preenchido ao listar pontos" },
     { "key": "operadorId",    "value": "",                                          "type": "string", "description": "Preenchido ao listar operadores" },
     { "key": "agendaId",      "value": "",                                          "type": "string" },
-    { "key": "cameraId",      "value": "",                                          "type": "string" },
     { "key": "clienteId",     "value": "",                                          "type": "string" },
     { "key": "planoId",       "value": "",                                          "type": "string" },
     { "key": "aberturaId",    "value": "",                                          "type": "string", "description": "ID do RegistroAbertura (preenchido ao registrar abertura)" },
@@ -21,6 +20,7 @@
     { "key": "eventoId",      "value": "",                                          "type": "string", "description": "Preenchido ao listar eventos" },
     { "key": "nomeComputador","value": "DESKTOP-LOJA01",                            "type": "string", "description": "Nome da máquina (enviado pela ferramenta Windows)" },
     { "key": "supervisorId",  "value": "",                                          "type": "string", "description": "Preenchido ao criar supervisor" },
+    { "key": "usuarioId",     "value": "",                                          "type": "string", "description": "Preenchido ao listar/criar usuário de um cliente (superadmin)" },
     { "key": "agentKeySup",   "value": "",                                          "type": "string", "description": "agentKey do supervisor (preenchido ao criar/regenerar)" },
     { "key": "agentKeyOp",    "value": "",                                          "type": "string", "description": "agentKey do operador (preenchido ao regenerar)" }
   ],
@@ -688,7 +688,7 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Ciclo Padrão\",\n  \"duracaoMinutos\": 30,\n  \"toleranciaMinutos\": 5,\n  \"avisoAntesMin\": 5,\n  \"codigoCheckin\": \"1602\",\n  \"codigoPanico\": \"1122\",\n  \"codigoFalha\": \"1130\",\n  \"capturarSnapshot\": true,\n  \"autoReiniciar\": true,\n  \"ativo\": true\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Ciclo Padrão\",\n  \"duracaoMinutos\": 30,\n  \"toleranciaMinutos\": 5,\n  \"avisoAntesMin\": 5,\n  \"codigoCheckin\": \"1602\",\n  \"codigoPanico\": \"1122\",\n  \"codigoFalha\": \"1130\",\n  \"autoReiniciar\": true,\n  \"ativo\": true\n}" },
             "url": { "raw": "{{baseUrl}}/ciclo/padrao", "host": ["{{baseUrl}}"], "path": ["ciclo","padrao"] }
           }
         }
@@ -731,82 +731,11 @@
           }
         },
         {
-          "name": "Gravação do evento (±5 min)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/eventos/{{eventoId}}/playback", "host": ["{{baseUrl}}"], "path": ["eventos","{{eventoId}}","playback"] }
-          }
-        },
-        {
           "name": "Toggle monitoramento",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "url": { "raw": "{{baseUrl}}/eventos/{{eventoId}}/monitorar", "host": ["{{baseUrl}}"], "path": ["eventos","{{eventoId}}","monitorar"] }
-          }
-        }
-      ]
-    },
-
-    {
-      "name": "📷 Câmeras",
-      "item": [
-        {
-          "name": "Listar câmeras",
-          "event": [{ "listen": "test", "script": { "exec": [
-            "var json = pm.response.json();",
-            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('cameraId', json[0].id); }"
-          ], "type": "text/javascript" } }],
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/cameras", "host": ["{{baseUrl}}"], "path": ["cameras"] }
-          }
-        },
-        {
-          "name": "Status online/offline",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/cameras/status", "host": ["{{baseUrl}}"], "path": ["cameras","status"] }
-          }
-        },
-        {
-          "name": "Adicionar câmera",
-          "event": [{ "listen": "test", "script": { "exec": [
-            "var json = pm.response.json();",
-            "if (json.id) { pm.collectionVariables.set('cameraId', json.id); }"
-          ], "type": "text/javascript" } }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"deviceSerial\": \"ABC123456\",\n  \"deviceName\": \"Câmera Loja\",\n  \"channelNo\": 1,\n  \"pontoId\": \"{{pontoId}}\"\n}" },
-            "url": { "raw": "{{baseUrl}}/cameras", "host": ["{{baseUrl}}"], "path": ["cameras"] }
-          }
-        },
-        {
-          "name": "Obter stream ao vivo (HLS)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}/stream", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}","stream"] }
-          }
-        },
-        {
-          "name": "Capturar snapshot",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}/snapshot", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}","snapshot"] }
-          }
-        },
-        {
-          "name": "Remover câmera",
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{baseUrl}}/cameras/{{cameraId}}", "host": ["{{baseUrl}}"], "path": ["cameras","{{cameraId}}"] }
           }
         }
       ]
@@ -1001,6 +930,50 @@
           }
         },
         {
+          "name": "Listar usuários do cliente",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (Array.isArray(json) && json[0]) { pm.collectionVariables.set('usuarioId', json[0].id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }],
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/usuarios", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","usuarios"] }
+          }
+        },
+        {
+          "name": "Criar usuário no cliente",
+          "description": "Papel: ADMIN ou OPERADOR. Senha mínima de 6 caracteres. Email deve ser único no sistema.",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.id) { pm.collectionVariables.set('usuarioId', json.id); }"
+          ], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Novo Usuário\",\n  \"email\": \"usuario@cliente.com.br\",\n  \"senha\": \"Senha@123\",\n  \"papel\": \"OPERADOR\"\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/usuarios", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","usuarios"] }
+          }
+        },
+        {
+          "name": "Atualizar usuário do cliente (papel/ativo)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"papel\": \"ADMIN\",\n  \"ativo\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/usuarios/{{usuarioId}}", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","usuarios","{{usuarioId}}"] }
+          }
+        },
+        {
+          "name": "Resetar senha de usuário do cliente",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"senha\": \"NovaSenha@456\"\n}" },
+            "url": { "raw": "{{baseUrl}}/superadmin/clientes/{{clienteId}}/usuarios/{{usuarioId}}/resetar-senha", "host": ["{{baseUrl}}"], "path": ["superadmin","clientes","{{clienteId}}","usuarios","{{usuarioId}}","resetar-senha"] }
+          }
+        },
+        {
           "name": "Criar assinatura para cliente",
           "request": {
             "method": "POST",
@@ -1043,7 +1016,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{superToken}}" }, { "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Enterprise\",\n  \"descricao\": \"Para grandes redes\",\n  \"valorMensal\": 999.90,\n  \"valorAnual\": 9999.00,\n  \"pontosIncluidos\": 50,\n  \"limiteCameras\": 100,\n  \"limiteUsuarios\": 50\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Enterprise\",\n  \"descricao\": \"Para grandes redes\",\n  \"valorMensal\": 999.90,\n  \"valorAnual\": 9999.00,\n  \"pontosIncluidos\": 50,\n  \"limiteUsuarios\": 50\n}" },
             "url": { "raw": "{{baseUrl}}/superadmin/planos", "host": ["{{baseUrl}}"], "path": ["superadmin","planos"] }
           }
         },
