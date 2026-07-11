@@ -47,6 +47,8 @@ const EVENTOS_DISPONIVEIS = [
   { value: 'PANICO_SILENCIOSO', label: '🚨 Pânico Silencioso' },
   { value: 'COACAO',            label: '⚠️ Coação' },
   { value: 'ALERTA',            label: '🔔 Alerta — Sem Check-in' },
+  { value: 'SUPERVISOR_ENTRADA',label: '🛡️ Supervisor — Chegada na unidade' },
+  { value: 'SUPERVISOR_SAIDA',  label: '🛡️ Supervisor — Saída da unidade' },
 ]
 
 // ─── componente principal ─────────────────────────────────────────────────────

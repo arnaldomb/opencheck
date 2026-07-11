@@ -11,6 +11,7 @@ const TIPO_CODIGO_FALLBACK: Record<string, string> = {
   FALHA: '1130', CHECKIN: '1602', ALERTA: '1130',
   ABERTURA_CHECKIN: '1400', ABERTURA_AUSENTE: '1402',
   FECHAMENTO_CHECKIN: '1410', FECHAMENTO_AUSENTE: '1412',
+  SUPERVISOR_ENTRADA: '1420', SUPERVISOR_SAIDA: '1421',
   AVISO: '1140', RESTAURACAO: '1150', TESTE: '1602',
 }
 
@@ -140,6 +141,28 @@ function buildMensagem(opts: {
         fechamento: 'Solicitamos a verificação imediata da situação para garantir o cumprimento dos procedimentos operacionais.',
       })
 
+    case 'SUPERVISOR_ENTRADA':
+      return (
+        '🛡️ *SUPERVISOR NA UNIDADE*\n\n' +
+        'O supervisor iniciou a ronda de supervisão na unidade.\n\n' +
+        `Empresa: ${empresa}\n` +
+        `Unidade: ${ponto}\n` +
+        `Supervisor: ${operador ?? 'Não identificado'}\n` +
+        `Chegada: ${dataHoraMensagem()}\n\n` +
+        'Registro de entrada confirmado no sistema.'
+      )
+
+    case 'SUPERVISOR_SAIDA':
+      return (
+        '✅ *RONDA DE SUPERVISÃO CONCLUÍDA*\n\n' +
+        'O supervisor finalizou a visita à unidade.\n\n' +
+        `Empresa: ${empresa}\n` +
+        `Unidade: ${ponto}\n` +
+        `Supervisor: ${operador ?? 'Não identificado'}\n` +
+        `Saída: ${dataHoraMensagem()}\n\n` +
+        'Registro de saída confirmado no sistema.'
+      )
+
     default:
       return buildMensagemCorporativa({
         titulo: `ℹ️ *${tipo}*`,
@@ -198,13 +221,17 @@ export function notificacaoWorker(): void {
       prisma.configEventoGlobal.findUnique({ where: { id: 'global' } }),
     ])
 
-    // Resolve nome do operador a partir do meta do evento
+    // Resolve nome do operador/supervisor a partir do meta do evento
     let nomeOperador: string | null = null
     const meta = evento?.meta as Record<string, unknown> | null
-    const operadorId = meta?.operadorId as string | undefined
+    const operadorId   = meta?.operadorId as string | undefined
+    const supervisorId = meta?.supervisorId as string | undefined
     if (operadorId) {
       const op = await prisma.operador.findUnique({ where: { id: operadorId }, select: { nome: true } })
       nomeOperador = op?.nome ?? null
+    } else if (supervisorId) {
+      const sup = await prisma.supervisor.findUnique({ where: { id: supervisorId }, select: { nome: true } })
+      nomeOperador = sup?.nome ?? null
     }
 
     const statusAbertura = (meta?.statusAbertura as string | undefined) ?? null

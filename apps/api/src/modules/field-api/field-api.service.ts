@@ -594,13 +594,19 @@ async function registrarMovimentoSupervisor(
     include: { supervisor: { select: { id: true, nome: true } } },
   })
 
-  await prisma.evento.create({
+  const tipoEvento = tipo === 'ENTRADA' ? 'SUPERVISOR_ENTRADA' as const : 'SUPERVISOR_SAIDA' as const
+  const evento = await prisma.evento.create({
     data: {
       tenantId,
       pontoId,
-      tipo: tipo === 'ENTRADA' ? 'SUPERVISOR_ENTRADA' : 'SUPERVISOR_SAIDA',
+      tipo: tipoEvento,
       meta: { supervisorId, registroId: registro.id },
     },
+  })
+
+  // Notificação WhatsApp com mensagem personalizada de chegada/saída
+  await notificacaoQueue.add('supervisor-ronda', {
+    tenantId, pontoId, eventoId: evento.id, tipo: tipoEvento,
   })
 
   return registro
