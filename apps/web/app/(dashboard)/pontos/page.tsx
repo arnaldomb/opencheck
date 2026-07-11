@@ -70,7 +70,11 @@ export default function PontosPage() {
   }
 
   async function handleExcluir(p: Ponto) {
-    if (!confirm(`Desativar o ponto "${p.nome}"?`)) return
+    if (!confirm(
+      `Excluir o ponto "${p.nome}"?\n\n` +
+      'Esta ação é PERMANENTE: remove ciclos, registros de abertura/fechamento e rondas deste ponto. ' +
+      'Os eventos são mantidos no histórico.'
+    )) return
     setDeletando(p.id)
     try {
       await apiFetch(`/pontos/${p.id}`, { method: 'DELETE' })
@@ -142,7 +146,7 @@ export default function PontosPage() {
                   <Link
                     href={`/pontos/${p.id}`}
                     className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-ggtech-blue transition-colors"
-                    title="Configurar (horários, agentKey, câmeras…)"
+                    title="Configurar (horários, agentKey…)"
                   >
                     <Settings className="h-3.5 w-3.5" />
                   </Link>
@@ -157,7 +161,7 @@ export default function PontosPage() {
                     onClick={() => handleExcluir(p)}
                     disabled={deletando === p.id}
                     className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                    title="Desativar"
+                    title="Excluir ponto"
                   >
                     {deletando === p.id
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />

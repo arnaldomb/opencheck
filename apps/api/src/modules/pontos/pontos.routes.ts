@@ -52,13 +52,23 @@ export async function pontosRoutes(app: FastifyInstance) {
     return prisma.ponto.update({ where: { id }, data: request.body as object })
   })
 
+  // Exclusão definitiva: remove ciclos, registros e configs do ponto.
+  // Eventos são preservados (pontoId → null) para manter o histórico de auditoria.
   app.delete('/:id', async (request, reply) => {
     const { tenantId } = request.user as { tenantId: string }
     const { id } = request.params as { id: string }
     const ponto = await prisma.ponto.findFirst({ where: { id, tenantId } })
     if (!ponto) return reply.status(404).send({ error: 'Ponto não encontrado' })
 
-    await prisma.ponto.update({ where: { id }, data: { ativo: false } })
+    await prisma.$transaction([
+      prisma.execucaoCiclo.deleteMany({ where: { pontoId: id } }),
+      prisma.registroAbertura.deleteMany({ where: { pontoId: id } }),
+      prisma.registroSupervisor.deleteMany({ where: { pontoId: id } }),
+      prisma.evento.updateMany({ where: { pontoId: id }, data: { pontoId: null } }),
+      prisma.configCiclo.deleteMany({ where: { pontoId: id } }),
+      // ConfigAbertura/turnos e vínculos com operadores/supervisores caem em cascata
+      prisma.ponto.delete({ where: { id } }),
+    ])
     return { success: true }
   })
 
