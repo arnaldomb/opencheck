@@ -242,6 +242,37 @@ async function main() {
     },
   })
 
+  // ── Config de Abertura/Fechamento por estabelecimento ──────────────────────
+  // Loja 1: seg–sex 08:00–20:00 · Loja 2: seg–sex 08:00–18:00 · Loja 3: todos os dias 08:00–22:00
+  const horariosAbertura: { pontoId: string; diasSemana: number[]; horaAbertura: string; horaFechamento: string }[] = [
+    { pontoId: ponto1.id, diasSemana: [1, 2, 3, 4, 5], horaAbertura: '08:00', horaFechamento: '20:00' },
+    { pontoId: ponto2.id, diasSemana: [1, 2, 3, 4, 5], horaAbertura: '08:00', horaFechamento: '18:00' },
+    { pontoId: ponto3.id, diasSemana: [],              horaAbertura: '08:00', horaFechamento: '22:00' }, // vazio = todos os dias
+  ]
+
+  for (const h of horariosAbertura) {
+    const configAbertura = await prisma.configAbertura.upsert({
+      where: { pontoId: h.pontoId },
+      update: { ativo: true },
+      create: { tenantId: tenant1.id, pontoId: h.pontoId, ativo: true },
+    })
+    // Substitui os turnos para manter o seed determinístico
+    await prisma.turnoAbertura.deleteMany({ where: { configId: configAbertura.id } })
+    await prisma.turnoAbertura.create({
+      data: {
+        configId: configAbertura.id,
+        diasSemana: h.diasSemana,
+        horaAbertura: h.horaAbertura,
+        toleranciaMinutos: 30,
+        horaFechamento: h.horaFechamento,
+        toleranciaFechamentoMinutos: 15,
+        checkinFechamentoObrigatorio: true,
+        ativo: true,
+      },
+    })
+  }
+  console.log('  ✅ Configs de abertura/fechamento criadas (Loja 1: seg–sex 08–20h · Loja 2: seg–sex 08–18h · Loja 3: todos os dias 08–22h)')
+
   // Execuções
   await prisma.execucaoCiclo.createMany({
     skipDuplicates: true,
