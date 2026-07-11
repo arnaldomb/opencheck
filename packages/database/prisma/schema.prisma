@@ -49,6 +49,8 @@ model Tenant {
   telefone     String?
   ativo               Boolean  @default(true)
   onboardingOk        Boolean  @default(false)
+  // Logo do cliente (data URI base64) — exibida no painel e nos relatórios
+  logoUrl             String?
   criadoEm   DateTime @default(now())
 
   usuarios              Usuario[]

@@ -38,14 +38,24 @@ export default function SidebarLayout({ children }: Props) {
   const pathname = usePathname()
   const [role, setRole]     = useState<string | null>(null)
   const [tenant, setTenant] = useState<string>('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) { router.replace('/login'); return }
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
-      setRole(payload.role ?? 'user')
+      const r = payload.role ?? 'user'
+      setRole(r)
       setTenant(payload.tenantNome ?? payload.email ?? '')
+      if (r !== 'superadmin') {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/configuracoes/logo`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(res => res.json())
+          .then(d => setLogoUrl(d.logoUrl ?? null))
+          .catch(() => {})
+      }
     } catch {
       router.replace('/login')
     }
@@ -86,11 +96,21 @@ export default function SidebarLayout({ children }: Props) {
           )}
         </div>
 
-        {/* Tenant name */}
+        {/* Tenant name / logo */}
         {tenant && (
           <div className="px-6 py-3 border-b border-white/10">
-            <p className="text-white/40 text-xs uppercase tracking-wider">Empresa</p>
-            <p className="text-white/80 text-sm font-medium truncate">{tenant}</p>
+            {logoUrl ? (
+              <div className="space-y-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoUrl} alt={tenant} className="max-h-12 max-w-full object-contain" />
+                <p className="text-white/50 text-xs font-medium truncate">{tenant}</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-white/40 text-xs uppercase tracking-wider">Empresa</p>
+                <p className="text-white/80 text-sm font-medium truncate">{tenant}</p>
+              </>
+            )}
           </div>
         )}
 

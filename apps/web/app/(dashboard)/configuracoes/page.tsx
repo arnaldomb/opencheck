@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Bell, Users, ChevronRight } from 'lucide-react'
+import { Bell, Users, ChevronRight, ImageIcon } from 'lucide-react'
 
 const ITEMS = [
   {
@@ -9,6 +9,12 @@ const ITEMS = [
     icon: Bell,
     label: 'Notificações',
     desc: 'Configure WhatsApp e canais de alerta por ponto',
+  },
+  {
+    href: '/configuracoes/logo',
+    icon: ImageIcon,
+    label: 'Logotipo',
+    desc: 'Personalize o painel e os relatórios com a logo da sua empresa',
   },
   {
     href: '/configuracoes/usuarios',

@@ -2,8 +2,44 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '@opencheck/database'
 import { authMiddleware } from '../../middleware/auth.middleware.js'
 
+// data URI de imagem, limitado a ~700KB (≈500KB de imagem original)
+const LOGO_PREFIX = /^data:image\/(png|jpe?g|webp);base64,/
+const LOGO_MAX_CHARS = 700_000
+
 export async function configuracoesRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
+
+  // ── Logo do cliente ───────────────────────────────────────────────────────
+
+  app.get('/logo', async (request) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { logoUrl: true, nome: true },
+    })
+    return { logoUrl: tenant?.logoUrl ?? null, nome: tenant?.nome ?? '' }
+  })
+
+  app.put('/logo', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const { logo } = (request.body ?? {}) as { logo?: string }
+
+    if (!logo || !LOGO_PREFIX.test(logo)) {
+      return reply.status(400).send({ error: 'Envie uma imagem PNG, JPEG ou WebP em base64 (data URI)' })
+    }
+    if (logo.length > LOGO_MAX_CHARS) {
+      return reply.status(400).send({ error: 'Imagem muito grande — use um arquivo de até 500KB' })
+    }
+
+    await prisma.tenant.update({ where: { id: tenantId }, data: { logoUrl: logo } })
+    return { ok: true }
+  })
+
+  app.delete('/logo', async (request) => {
+    const { tenantId } = request.user as { tenantId: string }
+    await prisma.tenant.update({ where: { id: tenantId }, data: { logoUrl: null } })
+    return { ok: true }
+  })
 
   // ── Notificações ──────────────────────────────────────────────────────────
 

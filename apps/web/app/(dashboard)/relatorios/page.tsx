@@ -9,6 +9,26 @@ import {
 
 interface Ponto { id: string; nome: string; endereco?: string }
 interface SupervisorItem { id: string; nome: string }
+interface Empresa { id: string; nome: string; logoUrl?: string | null }
+
+// Desenha a logo do cliente no canto direito do cabeçalho azul do PDF.
+// Retorna a posição X onde os textos alinhados à direita devem terminar.
+async function desenharLogoPDF(doc: import('jspdf').jsPDF, W: number, logoUrl?: string | null): Promise<number> {
+  if (!logoUrl) return W - 12
+  try {
+    const img = new Image()
+    img.src = logoUrl
+    await img.decode()
+    const h = 14
+    const w = Math.min(42, (img.naturalWidth / img.naturalHeight) * h)
+    doc.setFillColor(255, 255, 255)
+    doc.roundedRect(W - 14 - w, 3, w + 4, h + 4, 1.5, 1.5, 'F')
+    doc.addImage(logoUrl, W - 12 - w, 5, w, h)
+    return W - 18 - w
+  } catch {
+    return W - 12
+  }
+}
 
 // ── Abertura/Fechamento ────────────────────────────────────────────────────
 interface LinhaAbertura {
@@ -19,7 +39,7 @@ interface LinhaAbertura {
 }
 interface RelatorioAbertura {
   geradoEm: string
-  empresa: { id: string; nome: string }
+  empresa: Empresa
   periodo: { de: string; ate: string }
   pontos: Ponto[]
   resumo: { totalLinhas: number; abertas: number; abertasFora: number; naoAbriram: number; fechadas: number; naoFecharam: number }
@@ -29,7 +49,7 @@ interface RelatorioAbertura {
 // ── Ciclos/Eventos ─────────────────────────────────────────────────────────
 interface RelatorioCiclos {
   geradoEm: string
-  empresa: { id: string; nome: string }
+  empresa: Empresa
   periodo: { de: string; ate: string }
   pontos: Ponto[]
   resumo: { totalCiclos: number; ciclosConcluidos: number; ciclosAlerta: number; totalEventos: number; totalCheckins: number; totalAlertas: number; taxaCumprimento: number }
@@ -46,7 +66,7 @@ interface VisitaRonda {
 }
 interface RelatorioRondas {
   geradoEm: string
-  empresa: { id: string; nome: string }
+  empresa: Empresa
   periodo: { de: string; ate: string }
   supervisores: SupervisorItem[]
   resumo: {
@@ -116,8 +136,10 @@ async function gerarPDFAbertura(dados: RelatorioAbertura) {
   doc.text('OpenCheck', 12, 10)
   doc.setFontSize(10); doc.setFont('helvetica', 'normal')
   doc.text('Relatório de Abertura / Fechamento', 12, 17)
-  doc.text(`${dados.empresa.nome}`, W - 12, 10, { align: 'right' })
-  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, W - 12, 17, { align: 'right' })
+  const rightX = await desenharLogoPDF(doc, W, dados.empresa.logoUrl)
+  doc.setTextColor(255, 255, 255); doc.setFontSize(10)
+  doc.text(`${dados.empresa.nome}`, rightX, 10, { align: 'right' })
+  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, rightX, 17, { align: 'right' })
 
   doc.setTextColor(...gray); doc.setFontSize(8)
   doc.text(`Pontos: ${dados.pontos.map(p => p.nome).join(' · ') || 'Todos'}`, 12, 28)
@@ -253,8 +275,10 @@ async function gerarPDFCiclos(dados: RelatorioCiclos) {
   doc.text('OpenCheck', 12, 10)
   doc.setFontSize(10); doc.setFont('helvetica', 'normal')
   doc.text('Relatório de Ciclos e Eventos', 12, 17)
-  doc.text(`${dados.empresa.nome}`, W - 12, 10, { align: 'right' })
-  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, W - 12, 17, { align: 'right' })
+  const rightX = await desenharLogoPDF(doc, W, dados.empresa.logoUrl)
+  doc.setTextColor(255, 255, 255); doc.setFontSize(10)
+  doc.text(`${dados.empresa.nome}`, rightX, 10, { align: 'right' })
+  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, rightX, 17, { align: 'right' })
 
   doc.setTextColor(...gray); doc.setFontSize(8)
   doc.text(`Pontos: ${dados.pontos.map(p => p.nome).join(' · ') || 'Todos'}`, 12, 28)
@@ -395,8 +419,10 @@ async function gerarPDFRondas(dados: RelatorioRondas) {
   doc.text('OpenCheck', 12, 10)
   doc.setFontSize(10); doc.setFont('helvetica', 'normal')
   doc.text('Relatório de Rondas de Supervisão', 12, 17)
-  doc.text(`${dados.empresa.nome}`, W - 12, 10, { align: 'right' })
-  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, W - 12, 17, { align: 'right' })
+  const rightX = await desenharLogoPDF(doc, W, dados.empresa.logoUrl)
+  doc.setTextColor(255, 255, 255); doc.setFontSize(10)
+  doc.text(`${dados.empresa.nome}`, rightX, 10, { align: 'right' })
+  doc.text(`Período: ${fmtDate(dados.periodo.de)} a ${fmtDate(dados.periodo.ate)}`, rightX, 17, { align: 'right' })
 
   doc.setTextColor(...gray); doc.setFontSize(8)
   doc.text(`Supervisores: ${dados.supervisores.map(s => s.nome).join(' · ') || 'Todos'}`, 12, 28)

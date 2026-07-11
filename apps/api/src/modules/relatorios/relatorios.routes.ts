@@ -23,7 +23,7 @@ export async function relatoriosRoutes(app: FastifyInstance) {
     const dataFim    = new Date(`${ate}T23:59:59`)
 
     const [tenant, pontos, eventos, ciclos] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true } }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true, logoUrl: true } }),
 
       prisma.ponto.findMany({
         where: { tenantId, ...(pontoId ? { id: pontoId } : {}), ativo: true },
@@ -123,7 +123,7 @@ export async function relatoriosRoutes(app: FastifyInstance) {
     const dataFim    = new Date(`${ate}T23:59:59-03:00`)
 
     const [tenant, pontos, registros] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true } }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true, logoUrl: true } }),
 
       prisma.ponto.findMany({
         where: { tenantId, ...(pontoId ? { id: pontoId } : {}), ativo: true },
@@ -205,7 +205,7 @@ export async function relatoriosRoutes(app: FastifyInstance) {
     const dataFim    = new Date(`${ate}T23:59:59-03:00`)
 
     const [tenant, supervisores, visitas] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true } }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, nome: true, logoUrl: true } }),
       prisma.supervisor.findMany({
         where: { tenantId, ...(supervisorId ? { id: supervisorId } : {}), ativo: true },
         select: { id: true, nome: true },
