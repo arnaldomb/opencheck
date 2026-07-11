@@ -153,31 +153,32 @@ async function main() {
   })
 
   // Operadores — com agentKey
+  // Upsert pela agentKey (única) — id é cuid gerado pelo Prisma
   await prisma.operador.upsert({
-    where: { id: 'vig-joao-silva' },
-    update: { agentKey: agentKey('vig1joaosilva'), agentKeyAt: new Date(), pontos: { connect: { id: ponto1.id } } },
+    where: { agentKey: agentKey('vig1joaosilva') },
+    update: { agentKeyAt: new Date(), pontos: { connect: { id: ponto1.id } } },
     create: {
-      id: 'vig-joao-silva', tenantId: tenant1.id,
+      tenantId: tenant1.id,
       nome: 'João Silva', telefone: '+55 11 99123-4567', ativo: true,
       agentKey: agentKey('vig1joaosilva'), agentKeyAt: new Date(),
       pontos: { connect: { id: ponto1.id } },
     },
   })
   await prisma.operador.upsert({
-    where: { id: 'vig-marcos-oliveira' },
-    update: { agentKey: agentKey('vig2marcosoliveira'), agentKeyAt: new Date(), pontos: { connect: { id: ponto2.id } } },
+    where: { agentKey: agentKey('vig2marcosoliveira') },
+    update: { agentKeyAt: new Date(), pontos: { connect: { id: ponto2.id } } },
     create: {
-      id: 'vig-marcos-oliveira', tenantId: tenant1.id,
+      tenantId: tenant1.id,
       nome: 'Marcos Oliveira', telefone: '+55 11 99234-5678', ativo: true,
       agentKey: agentKey('vig2marcosoliveira'), agentKeyAt: new Date(),
       pontos: { connect: { id: ponto2.id } },
     },
   })
   await prisma.operador.upsert({
-    where: { id: 'vig-roberto-costa' },
-    update: { agentKey: agentKey('vig3robertocosta'), agentKeyAt: new Date(), pontos: { connect: { id: ponto3.id } } },
+    where: { agentKey: agentKey('vig3robertocosta') },
+    update: { agentKeyAt: new Date(), pontos: { connect: { id: ponto3.id } } },
     create: {
-      id: 'vig-roberto-costa', tenantId: tenant1.id,
+      tenantId: tenant1.id,
       nome: 'Roberto Costa', telefone: '+55 11 99345-6789', ativo: true,
       agentKey: agentKey('vig3robertocosta'), agentKeyAt: new Date(),
       pontos: { connect: { id: ponto3.id } },
@@ -322,10 +323,10 @@ async function main() {
   })
 
   await prisma.operador.upsert({
-    where: { id: 'vig-pedro-ferreira' },
-    update: { agentKey: agentKey('vig4pedroferreira'), agentKeyAt: new Date(), pontos: { connect: { id: ponto4.id } } },
+    where: { agentKey: agentKey('vig4pedroferreira') },
+    update: { agentKeyAt: new Date(), pontos: { connect: { id: ponto4.id } } },
     create: {
-      id: 'vig-pedro-ferreira', tenantId: tenant2.id,
+      tenantId: tenant2.id,
       nome: 'Pedro Ferreira', telefone: '+55 81 99876-5432', ativo: true,
       agentKey: agentKey('vig4pedroferreira'), agentKeyAt: new Date(),
       pontos: { connect: { id: ponto4.id } },
