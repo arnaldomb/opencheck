@@ -421,6 +421,7 @@ type StatusSinotico =
   | 'PENDENTE'
   | 'AUSENTE'
   | 'FECHAMENTO_PENDENTE'
+  | 'FOLGA'              // tem turnos configurados, mas nenhum para hoje
   | 'SEM_CONFIGURACAO'
 
 function computeStatusSinotico(opts: {
@@ -487,11 +488,18 @@ export async function getSinotico(tenantId: string) {
   return pontos.map(p => {
     const reg   = regMap.get(p.id) ?? null
     const cfg   = p.configAbertura
-    const turno = cfg?.turnos.find(
+    const turnoHoje = cfg?.turnos.find(
       t => t.diasSemana.length === 0 || t.diasSemana.includes(diaSemana),
     ) ?? null
+    const temTurnos = !!cfg?.ativo && (cfg?.turnos.length ?? 0) > 0
 
-    const statusAtual = computeStatusSinotico({ turno, reg, hoje, agora })
+    // Fora do turno hoje ≠ sem configuração: exibe os horários da semana
+    const foraDoTurno = temTurnos && !turnoHoje
+    const turnoExibido = turnoHoje ?? (foraDoTurno ? cfg!.turnos[0] : null)
+
+    const statusAtual: StatusSinotico = foraDoTurno
+      ? 'FOLGA'
+      : computeStatusSinotico({ turno: turnoHoje, reg, hoje, agora })
 
     return {
       pontoId:    p.id,
@@ -499,10 +507,11 @@ export async function getSinotico(tenantId: string) {
       endereco:   p.endereco ?? null,
       latitude:   p.latitude  ?? null,
       longitude:  p.longitude ?? null,
-      configurado: !!cfg && !!turno,
-      horaAbertura:   turno?.horaAbertura   ?? null,
-      horaFechamento: turno?.horaFechamento ?? null,
-      checkinFechamentoObrigatorio: turno?.checkinFechamentoObrigatorio ?? false,
+      configurado: temTurnos,
+      horaAbertura:   turnoExibido?.horaAbertura   ?? null,
+      horaFechamento: turnoExibido?.horaFechamento ?? null,
+      diasSemanaTurno: turnoExibido?.diasSemana    ?? null,
+      checkinFechamentoObrigatorio: turnoExibido?.checkinFechamentoObrigatorio ?? false,
       statusAtual,
       abertaEm:              reg?.abertaEm    ?? null,
       operadorAbertura:      reg?.operador?.nome          ?? reg?.supervisor?.nome          ?? null,

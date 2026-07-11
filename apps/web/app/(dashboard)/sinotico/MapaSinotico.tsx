@@ -7,7 +7,7 @@ import 'leaflet/dist/leaflet.css'
 import Link from 'next/link'
 import { Search, Maximize2, Minimize2, X } from 'lucide-react'
 
-type StatusSinotico = 'ABERTA' | 'FECHADA' | 'PENDENTE' | 'AUSENTE' | 'FECHAMENTO_PENDENTE' | 'SEM_CONFIGURACAO'
+type StatusSinotico = 'ABERTA' | 'FECHADA' | 'PENDENTE' | 'AUSENTE' | 'FECHAMENTO_PENDENTE' | 'FOLGA' | 'SEM_CONFIGURACAO'
 
 interface PontoSinotico {
   pontoId: string
@@ -28,6 +28,7 @@ const STATUS_COLOR: Record<StatusSinotico, { fill: string; label: string }> = {
   PENDENTE:            { fill: '#f97316', label: 'Aguardando abertura' },
   AUSENTE:             { fill: '#ef4444', label: 'Não abriu' },
   FECHAMENTO_PENDENTE: { fill: '#dc2626', label: 'Fechamento pendente' },
+  FOLGA:               { fill: '#818cf8', label: 'Fora do turno hoje' },
   SEM_CONFIGURACAO:    { fill: '#7c3aed', label: 'Sem configuração' },
 }
 

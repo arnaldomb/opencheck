@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api'
 import {
   MapPin, RefreshCw, AlarmClock, LogOut, User, Clock,
   CheckCircle2, XCircle, AlertTriangle, Minus, Settings,
-  LayoutGrid, Map, Search, X,
+  LayoutGrid, Map, Search, X, Moon,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -25,6 +25,7 @@ type StatusSinotico =
   | 'PENDENTE'
   | 'AUSENTE'
   | 'FECHAMENTO_PENDENTE'
+  | 'FOLGA'
   | 'SEM_CONFIGURACAO'
 
 interface PontoSinotico {
@@ -36,6 +37,7 @@ interface PontoSinotico {
   configurado: boolean
   horaAbertura: string | null
   horaFechamento: string | null
+  diasSemanaTurno: number[] | null
   checkinFechamentoObrigatorio: boolean
   statusAtual: StatusSinotico
   abertaEm: string | null
@@ -105,6 +107,16 @@ const STATUS_CONFIG: Record<StatusSinotico, {
     iconColor: 'text-orange-500',
     dot: 'bg-orange-500',
   },
+  FOLGA: {
+    label: 'Fora do turno hoje',
+    bg: 'bg-indigo-50/50',
+    border: 'border-indigo-100',
+    badge: 'bg-indigo-50 text-indigo-500',
+    badgeText: 'Folga hoje',
+    icon: Moon,
+    iconColor: 'text-indigo-400',
+    dot: 'bg-indigo-300',
+  },
   SEM_CONFIGURACAO: {
     label: 'Sem configuração',
     bg: 'bg-gray-50',
@@ -115,6 +127,19 @@ const STATUS_CONFIG: Record<StatusSinotico, {
     iconColor: 'text-gray-400',
     dot: 'bg-gray-300',
   },
+}
+
+const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+// [1,2,3,4,5] → "Seg–Sex" · [] → "Todos os dias" · [1,3,5] → "Seg, Qua, Sex"
+function fmtDias(dias: number[] | null): string {
+  if (!dias || dias.length === 0) return 'Todos os dias'
+  const sorted = [...dias].sort()
+  const consecutivos = sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1)
+  if (consecutivos && sorted.length > 2) {
+    return `${DIAS_CURTOS[sorted[0]]}–${DIAS_CURTOS[sorted[sorted.length - 1]]}`
+  }
+  return sorted.map(d => DIAS_CURTOS[d]).join(', ')
 }
 
 function fmt(iso: string | null): string {
@@ -159,6 +184,11 @@ function PontoCard({ ponto }: { ponto: PontoSinotico }) {
       {/* Horários */}
       {ponto.configurado && (
         <div className="grid grid-cols-2 gap-2 text-xs">
+          {ponto.statusAtual === 'FOLGA' && (
+            <p className="col-span-2 text-xs text-indigo-500 bg-white/70 rounded-lg px-2 py-1.5">
+              Opera <strong>{fmtDias(ponto.diasSemanaTurno)}</strong> — sem turno hoje
+            </p>
+          )}
           <div className="bg-white/70 rounded-lg p-2 space-y-0.5">
             <div className="flex items-center gap-1 text-gray-500">
               <AlarmClock className="h-3 w-3 text-green-500" /> Abertura
@@ -218,7 +248,7 @@ function PontoCard({ ponto }: { ponto: PontoSinotico }) {
   )
 }
 
-const ORDER: StatusSinotico[] = ['AUSENTE', 'FECHAMENTO_PENDENTE', 'ABERTA', 'PENDENTE', 'FECHADA', 'SEM_CONFIGURACAO']
+const ORDER: StatusSinotico[] = ['AUSENTE', 'FECHAMENTO_PENDENTE', 'ABERTA', 'PENDENTE', 'FECHADA', 'FOLGA', 'SEM_CONFIGURACAO']
 
 export default function SinoticoPage() {
   const [pontos, setPontos]         = useState<PontoSinotico[]>([])
@@ -317,7 +347,7 @@ export default function SinoticoPage() {
       </div>
 
       {/* Resumo */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {ORDER.map(s => {
           const cfg = STATUS_CONFIG[s]
           const Icon = cfg.icon
