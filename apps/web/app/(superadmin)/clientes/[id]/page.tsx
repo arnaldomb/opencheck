@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle, Camera } from 'lucide-react'
+import {
+  ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle,
+  Plus, X, Save, Loader2, KeyRound, Power, User,
+} from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Tenant {
   id: string; nome: string; email: string; cnpj?: string; telefone?: string; ativo: boolean; criadoEm: string
-  camerasHabilitadas: boolean
   assinatura?: {
     status: string; periodicidade: string; pontosContratados: number; trialAteEm?: string; proximaCobrancaEm?: string
     plano: { nome: string; valorMensal: number }
@@ -18,12 +20,22 @@ interface Tenant {
 
 interface Cobranca { id: string; valor: number; status: string; vencimentoEm: string }
 
+interface UsuarioTenant {
+  id: string; nome: string; email: string
+  papel: 'SUPERADMIN' | 'ADMIN' | 'OPERADOR'
+  ativo: boolean; criadoEm: string
+}
+
 const STATUS_MAP: Record<string, { label: string; Icon: React.ElementType; cls: string }> = {
   TRIAL:        { label: 'Trial',        Icon: Clock,         cls: 'bg-indigo-100 text-indigo-700' },
   ATIVA:        { label: 'Ativa',        Icon: CheckCircle,   cls: 'bg-green-100 text-green-700' },
   INADIMPLENTE: { label: 'Inadimplente', Icon: AlertCircle,   cls: 'bg-yellow-100 text-yellow-700' },
   SUSPENSA:     { label: 'Suspensa',     Icon: XCircle,       cls: 'bg-red-100 text-red-700' },
   CANCELADA:    { label: 'Cancelada',    Icon: XCircle,       cls: 'bg-gray-100 text-gray-600' },
+}
+
+const PAPEL_LABEL: Record<string, string> = {
+  SUPERADMIN: 'Superadmin', ADMIN: 'Admin', OPERADOR: 'Operador',
 }
 
 function auth() {
@@ -36,16 +48,34 @@ export default function ClienteDetailPage() {
 
   const [tenant, setTenant]       = useState<Tenant | null>(null)
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
+  const [usuarios, setUsuarios]   = useState<UsuarioTenant[]>([])
   const [loading, setLoading]     = useState(true)
-  const [tab, setTab]             = useState<'geral' | 'assinatura' | 'cobrancas'>('geral')
+  const [tab, setTab]             = useState<'geral' | 'usuarios' | 'assinatura' | 'cobrancas'>('geral')
+
+  // Usuários — estado de gestão
+  const [modalUsuario, setModalUsuario] = useState(false)
+  const [formUsuario, setFormUsuario]   = useState({ nome: '', email: '', senha: '', papel: 'OPERADOR' as 'ADMIN' | 'OPERADOR' })
+  const [salvandoUsuario, setSalvandoUsuario] = useState(false)
+  const [erroUsuario, setErroUsuario]   = useState('')
+  const [acaoUsuario, setAcaoUsuario]   = useState<string | null>(null)
+  const [resetando, setResetando]       = useState<UsuarioTenant | null>(null)
+  const [novaSenha, setNovaSenha]       = useState('')
+
+  const loadUsuarios = useCallback(async () => {
+    const data = await fetch(`${API}/superadmin/clientes/${id}/usuarios`, { headers: auth() })
+      .then(r => r.json()).catch(() => [])
+    setUsuarios(Array.isArray(data) ? data : [])
+  }, [id])
 
   useEffect(() => {
     Promise.all([
       fetch(`${API}/superadmin/clientes/${id}`, { headers: auth() }).then(r => r.json()),
       fetch(`${API}/superadmin/clientes/${id}/assinatura/cobrancas`, { headers: auth() }).then(r => r.json()).catch(() => []),
-    ]).then(([t, cob]) => {
+      fetch(`${API}/superadmin/clientes/${id}/usuarios`, { headers: auth() }).then(r => r.json()).catch(() => []),
+    ]).then(([t, cob, users]) => {
       setTenant(t)
       setCobrancas(Array.isArray(cob) ? cob : [])
+      setUsuarios(Array.isArray(users) ? users : [])
       setLoading(false)
     })
   }, [id])
@@ -60,14 +90,63 @@ export default function ClienteDetailPage() {
     setTenant(t => t ? { ...t, ativo: !t.ativo } : t)
   }
 
-  async function toggleCameras() {
-    if (!tenant) return
-    await fetch(`${API}/superadmin/clientes/${id}`, {
-      method: 'PUT',
-      headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ camerasHabilitadas: !tenant.camerasHabilitadas }),
-    })
-    setTenant(t => t ? { ...t, camerasHabilitadas: !t.camerasHabilitadas } : t)
+  async function criarUsuario(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvandoUsuario(true); setErroUsuario('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/usuarios`, {
+        method: 'POST',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(formUsuario),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error ?? `Erro ${res.status}`)
+      }
+      setModalUsuario(false)
+      setFormUsuario({ nome: '', email: '', senha: '', papel: 'OPERADOR' })
+      loadUsuarios()
+    } catch (err) {
+      setErroUsuario(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSalvandoUsuario(false)
+    }
+  }
+
+  async function alterarUsuario(u: UsuarioTenant, data: { papel?: string; ativo?: boolean }) {
+    setAcaoUsuario(u.id)
+    try {
+      await fetch(`${API}/superadmin/clientes/${id}/usuarios/${u.id}`, {
+        method: 'PUT',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      loadUsuarios()
+    } finally {
+      setAcaoUsuario(null)
+    }
+  }
+
+  async function resetarSenha(e: React.FormEvent) {
+    e.preventDefault()
+    if (!resetando) return
+    setSalvandoUsuario(true); setErroUsuario('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/usuarios/${resetando.id}/resetar-senha`, {
+        method: 'POST',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senha: novaSenha }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error ?? `Erro ${res.status}`)
+      }
+      setResetando(null); setNovaSenha('')
+    } catch (err) {
+      setErroUsuario(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSalvandoUsuario(false)
+    }
   }
 
   if (loading) return (
@@ -85,6 +164,7 @@ export default function ClienteDetailPage() {
 
   const TABS = [
     { key: 'geral',       label: 'Geral' },
+    { key: 'usuarios',    label: `Usuários (${usuarios.length})` },
     { key: 'assinatura',  label: 'Assinatura' },
     { key: 'cobrancas',   label: 'Cobranças' },
   ] as const
@@ -176,24 +256,90 @@ export default function ClienteDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="border-t pt-4">
-            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-3">Funcionalidades</p>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-              <div className="flex items-center gap-3">
-                <Camera className="h-4 w-4 text-gray-400" />
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Câmeras (EZVIZ)</p>
-                  <p className="text-xs text-gray-400">Vinculação de câmeras, aba Câmeras e integração EZVIZ</p>
-                </div>
+      {/* Tab: Usuários */}
+      {tab === 'usuarios' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              onClick={() => { setFormUsuario({ nome: '', email: '', senha: '', papel: 'OPERADOR' }); setErroUsuario(''); setModalUsuario(true) }}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" /> Novo usuário
+            </button>
+          </div>
+
+          <div className="card p-0 overflow-hidden">
+            {usuarios.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
+                <Users className="h-10 w-10 text-gray-200" />
+                <p className="text-sm">Nenhum usuário cadastrado neste cliente</p>
               </div>
-              <button
-                onClick={toggleCameras}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${tenant.camerasHabilitadas ? 'bg-ggtech-blue' : 'bg-gray-300'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tenant.camerasHabilitadas ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-xs text-gray-400 uppercase tracking-wider">
+                      <th className="px-4 py-3">Nome</th>
+                      <th className="px-4 py-3">Email</th>
+                      <th className="px-4 py-3">Papel</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Criado em</th>
+                      <th className="px-4 py-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usuarios.map(u => (
+                      <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          <span className="inline-flex items-center gap-2">
+                            <User className="h-3.5 w-3.5 text-gray-300" /> {u.nome}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{u.email}</td>
+                        <td className="px-4 py-3">
+                          <select
+                            className="input py-1 text-xs w-28"
+                            value={u.papel}
+                            disabled={acaoUsuario === u.id || u.papel === 'SUPERADMIN'}
+                            onChange={e => alterarUsuario(u, { papel: e.target.value })}
+                          >
+                            {u.papel === 'SUPERADMIN' && <option value="SUPERADMIN">Superadmin</option>}
+                            <option value="ADMIN">Admin</option>
+                            <option value="OPERADOR">Operador</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={u.ativo ? 'badge-green' : 'badge-gray'}>{u.ativo ? 'Ativo' : 'Inativo'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{new Date(u.criadoEm).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              onClick={() => { setResetando(u); setNovaSenha(''); setErroUsuario('') }}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-ggtech-blue transition-colors"
+                              title="Resetar senha"
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => alterarUsuario(u, { ativo: !u.ativo })}
+                              disabled={acaoUsuario === u.id}
+                              className={`p-1.5 rounded-lg transition-colors ${u.ativo ? 'hover:bg-red-50 text-gray-400 hover:text-red-500' : 'hover:bg-green-50 text-gray-400 hover:text-green-600'}`}
+                              title={u.ativo ? 'Desativar usuário' : 'Reativar usuário'}
+                            >
+                              {acaoUsuario === u.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -264,6 +410,77 @@ export default function ClienteDetailPage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal: novo usuário */}
+      {modalUsuario && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b">
+              <h2 className="font-heading font-semibold text-gray-800">Novo usuário — {tenant.nome}</h2>
+              <button onClick={() => setModalUsuario(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={criarUsuario} className="p-6 space-y-4">
+              <div>
+                <label className="label">Nome *</label>
+                <input className="input" required value={formUsuario.nome} onChange={e => setFormUsuario(f => ({ ...f, nome: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Email *</label>
+                <input type="email" className="input" required value={formUsuario.email} onChange={e => setFormUsuario(f => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Senha * (mín. 6 caracteres)</label>
+                <input type="password" className="input" required minLength={6} value={formUsuario.senha} onChange={e => setFormUsuario(f => ({ ...f, senha: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Papel *</label>
+                <select className="input" value={formUsuario.papel} onChange={e => setFormUsuario(f => ({ ...f, papel: e.target.value as 'ADMIN' | 'OPERADOR' }))}>
+                  <option value="ADMIN">Admin</option>
+                  <option value="OPERADOR">Operador</option>
+                </select>
+              </div>
+              {erroUsuario && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroUsuario}</div>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setModalUsuario(false)} className="btn-ghost flex-1">Cancelar</button>
+                <button type="submit" disabled={salvandoUsuario} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                  {salvandoUsuario ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {salvandoUsuario ? 'Criando...' : 'Criar usuário'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: resetar senha */}
+      {resetando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b">
+              <h2 className="font-heading font-semibold text-gray-800">Resetar senha — {resetando.nome}</h2>
+              <button onClick={() => setResetando(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={resetarSenha} className="p-6 space-y-4">
+              <div>
+                <label className="label">Nova senha * (mín. 6 caracteres)</label>
+                <input type="password" className="input" required minLength={6} value={novaSenha} onChange={e => setNovaSenha(e.target.value)} autoFocus />
+              </div>
+              {erroUsuario && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroUsuario}</div>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setResetando(null)} className="btn-ghost flex-1">Cancelar</button>
+                <button type="submit" disabled={salvandoUsuario} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                  {salvandoUsuario ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  {salvandoUsuario ? 'Salvando...' : 'Definir nova senha'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -92,18 +92,93 @@ export async function superadminRoutes(app: FastifyInstance) {
     })
   })
 
+  // ── Usuários dos tenants ──────────────────────────────────────────────────
+  app.get('/clientes/:id/usuarios', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { id: true } })
+    if (!tenant) return reply.status(404).send({ error: 'Cliente não encontrado' })
+    return prisma.usuario.findMany({
+      where: { tenantId: id },
+      select: { id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true },
+      orderBy: { criadoEm: 'asc' },
+    })
+  })
+
+  app.post('/clientes/:id/usuarios', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = request.body as { nome: string; email: string; senha: string; papel?: 'ADMIN' | 'OPERADOR' }
+    if (!body.nome?.trim() || !body.email?.trim() || !body.senha) {
+      return reply.status(400).send({ error: 'Nome, email e senha são obrigatórios' })
+    }
+    if (body.senha.length < 6) return reply.status(400).send({ error: 'Senha deve ter no mínimo 6 caracteres' })
+
+    const tenant = await prisma.tenant.findUnique({ where: { id }, select: { id: true } })
+    if (!tenant) return reply.status(404).send({ error: 'Cliente não encontrado' })
+
+    const existe = await prisma.usuario.findUnique({ where: { email: body.email } })
+    if (existe) return reply.status(409).send({ error: 'Já existe um usuário com este email' })
+
+    const usuario = await prisma.usuario.create({
+      data: {
+        tenantId: id,
+        nome:  body.nome.trim(),
+        email: body.email.trim(),
+        senha: await bcrypt.hash(body.senha, 12),
+        papel: body.papel ?? 'OPERADOR',
+      },
+      select: { id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true },
+    })
+    return reply.status(201).send(usuario)
+  })
+
+  app.put('/clientes/:id/usuarios/:usuarioId', async (request, reply) => {
+    const { id, usuarioId } = request.params as { id: string; usuarioId: string }
+    const body = request.body as { nome?: string; papel?: 'ADMIN' | 'OPERADOR'; ativo?: boolean }
+
+    const usuario = await prisma.usuario.findFirst({ where: { id: usuarioId, tenantId: id } })
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado' })
+
+    return prisma.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        ...(body.nome !== undefined ? { nome: body.nome } : {}),
+        ...(body.papel !== undefined ? { papel: body.papel } : {}),
+        ...(body.ativo !== undefined ? { ativo: body.ativo } : {}),
+      },
+      select: { id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true },
+    })
+  })
+
+  app.post('/clientes/:id/usuarios/:usuarioId/resetar-senha', async (request, reply) => {
+    const { id, usuarioId } = request.params as { id: string; usuarioId: string }
+    const { senha } = request.body as { senha: string }
+    if (!senha || senha.length < 6) return reply.status(400).send({ error: 'Senha deve ter no mínimo 6 caracteres' })
+
+    const usuario = await prisma.usuario.findFirst({ where: { id: usuarioId, tenantId: id } })
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado' })
+
+    await prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { senha: await bcrypt.hash(senha, 12) },
+    })
+    return { success: true }
+  })
+
   // ── Planos ────────────────────────────────────────────────────────────────
-  app.get('/planos', async () => prisma.plano.findMany({ where: { ativo: true } }))
+  app.get('/planos', async () => prisma.plano.findMany({ orderBy: { criadoEm: 'asc' } }))
 
   app.post('/planos', async (request, reply) => {
-    const body = request.body as { nome: string; descricao?: string; valorMensal: number; valorAnual?: number; pontosIncluidos: number; limiteCameras?: number; limiteUsuarios?: number }
+    const body = request.body as { nome: string; descricao?: string; valorMensal: number; valorAnual?: number; pontosIncluidos: number; limiteUsuarios?: number }
     const plano = await prisma.plano.create({ data: body })
     return reply.status(201).send(plano)
   })
 
-  app.put('/planos/:id', async (request) => {
+  app.put('/planos/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
-    return prisma.plano.update({ where: { id }, data: request.body as object })
+    const body = request.body as { nome?: string; descricao?: string; valorMensal?: number; valorAnual?: number | null; pontosIncluidos?: number; limiteUsuarios?: number; ativo?: boolean }
+    const plano = await prisma.plano.findUnique({ where: { id } })
+    if (!plano) return reply.status(404).send({ error: 'Plano não encontrado' })
+    return prisma.plano.update({ where: { id }, data: body })
   })
 
   // ── Configuração global de eventos (códigos CTRL+SAFE por TipoEvento) ────────
