@@ -2,14 +2,13 @@ using OpenCheck.Common.Http;
 
 namespace OpenCheck.Kiosk.Forms;
 
-// Tela de configuração — reduzida ao mínimo: URL da API, Agent Key do Ponto
-// e o atalho/tipo do botão AUX. O usuário do dia a dia (operador/supervisor)
-// nunca precisa abrir esta tela; é acessada apenas na instalação/manutenção.
+// Tela de configuração — reduzida ao mínimo: Agent Key do Ponto e o
+// atalho/tipo do botão AUX. A URL da API é fixa (aponta para produção) e
+// não é exibida nem editável aqui — evita configuração errada por engano.
 public class SettingsForm : Form
 {
     private readonly KioskConfiguration _config;
 
-    private TextBox  _txtApiUrl    = null!;
     private TextBox  _txtAgentKey  = null!;
     private Label    _lblPonto     = null!;
     private ComboBox _cmbAuxTipo   = null!;
@@ -26,7 +25,7 @@ public class SettingsForm : Form
     private void BuildUI()
     {
         Text = "OpenCheck — Configurações";
-        Size = new Size(480, 470);
+        Size = new Size(480, 430);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -45,7 +44,7 @@ public class SettingsForm : Form
         });
         header.Controls.Add(new Label
         {
-            Text = "URL da API, Agent Key do Ponto e atalho do AUX",
+            Text = "Agent Key do Ponto e atalho do AUX",
             ForeColor = Color.FromArgb(140, 185, 230),
             Font = new Font("Segoe UI", 7.5f),
             AutoSize = true,
@@ -57,28 +56,22 @@ public class SettingsForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(22, 18, 22, 14),
             ColumnCount = 2,
-            RowCount = 9
+            RowCount = 8
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r0 api url
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r1 agent key
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r2 test btn
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // r3 ponto result
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r4 section header
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r5 aux tipo
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r6 aux hotkey
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // r7 spacer
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));  // r8 buttons
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r0 agent key
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r1 test btn
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // r2 ponto result
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r3 section header
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r4 aux tipo
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r5 aux hotkey
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // r6 spacer
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));  // r7 buttons
 
         int r = 0;
 
-        // r0 — API URL
-        layout.Controls.Add(Lbl("API URL:"), 0, r);
-        _txtApiUrl = new TextBox { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f) };
-        layout.Controls.Add(_txtApiUrl, 1, r++);
-
-        // r1 — Agent Key do Ponto
+        // r0 — Agent Key do Ponto
         layout.Controls.Add(Lbl("Agent Key do Ponto:"), 0, r);
         var keyPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight };
         _txtAgentKey = new TextBox { Width = 206, PasswordChar = '●', Font = new Font("Consolas", 9f) };
@@ -92,7 +85,7 @@ public class SettingsForm : Form
         keyPanel.Controls.AddRange([_txtAgentKey, btnShow]);
         layout.Controls.Add(keyPanel, 1, r++);
 
-        // r2 — Testar Conexão
+        // r1 — Testar Conexão
         layout.Controls.Add(new Label(), 0, r);
         var btnTest = new Button
         {
@@ -109,7 +102,7 @@ public class SettingsForm : Form
         btnTest.Click += async (_, _) => await TestarConexaoAsync();
         layout.Controls.Add(btnTest, 1, r++);
 
-        // r3 — Ponto (resultado do teste)
+        // r2 — Ponto (resultado do teste)
         layout.Controls.Add(Lbl("Ponto:"), 0, r);
         _lblPonto = new Label
         {
@@ -120,7 +113,7 @@ public class SettingsForm : Form
         };
         layout.Controls.Add(_lblPonto, 1, r++);
 
-        // r4 — Seção AUX
+        // r3 — Seção AUX
         var secPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(235, 241, 250), Margin = new Padding(0, 6, 0, 4) };
         secPanel.Controls.Add(new Label
         {
@@ -134,13 +127,13 @@ public class SettingsForm : Form
         layout.SetColumnSpan(secPanel, 2);
         r++;
 
-        // r5 — Tipo de evento AUX
+        // r4 — Tipo de evento AUX
         layout.Controls.Add(Lbl("Tipo de evento:"), 0, r);
         _cmbAuxTipo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
         _cmbAuxTipo.Items.AddRange(["PANICO_SILENCIOSO", "PANICO", "COACAO"]);
         layout.Controls.Add(_cmbAuxTipo, 1, r++);
 
-        // r6 — Atalho de teclado
+        // r5 — Atalho de teclado
         layout.Controls.Add(Lbl("Atalho:"), 0, r);
         var panelHk = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
         _cmbAuxMod = ModCombo();
@@ -148,11 +141,11 @@ public class SettingsForm : Form
         panelHk.Controls.AddRange([_cmbAuxMod, Plus(), _cmbAuxKey]);
         layout.Controls.Add(panelHk, 1, r++);
 
-        // r7 — spacer
+        // r6 — spacer
         layout.Controls.Add(new Label(), 0, r);
         layout.Controls.Add(new Label(), 1, r++);
 
-        // r8 — Salvar / Cancelar
+        // r7 — Salvar / Cancelar
         var btnPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0) };
         var btnCancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Width = 96, Height = 32, FlatStyle = FlatStyle.Flat };
         btnCancel.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
@@ -210,7 +203,6 @@ public class SettingsForm : Form
 
     private void LoadValues()
     {
-        _txtApiUrl.Text   = _config.ApiUrl;
         _txtAgentKey.Text = _config.AgentKeyPonto;
         _lblPonto.Text    = string.IsNullOrEmpty(_config.PontoNome) ? "" : _config.PontoNome;
 
@@ -223,7 +215,6 @@ public class SettingsForm : Form
 
     private void SalvarValores()
     {
-        _config.ApiUrl              = _txtApiUrl.Text.Trim();
         _config.AgentKeyPonto       = _txtAgentKey.Text.Trim();
         _config.AuxTipo             = _cmbAuxTipo.SelectedItem?.ToString() ?? "PANICO_SILENCIOSO";
         _config.AuxHotkeyModifiers  = IndexToMod(_cmbAuxMod.SelectedIndex);
@@ -232,9 +223,9 @@ public class SettingsForm : Form
 
     private async Task TestarConexaoAsync()
     {
-        if (string.IsNullOrWhiteSpace(_txtApiUrl.Text) || string.IsNullOrWhiteSpace(_txtAgentKey.Text))
+        if (string.IsNullOrWhiteSpace(_txtAgentKey.Text))
         {
-            MessageBox.Show("Informe a URL da API e a Agent Key antes de testar.", "OpenCheck", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Informe a Agent Key antes de testar.", "OpenCheck", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -242,7 +233,7 @@ public class SettingsForm : Form
         _lblPonto.ForeColor = Color.DimGray;
         try
         {
-            var client = new OpenCheckClient(_txtApiUrl.Text.Trim(), _txtAgentKey.Text.Trim());
+            var client = new OpenCheckClient(_config.ApiUrl, _txtAgentKey.Text.Trim());
             var cfg    = await client.GetConfigAsync();
             var nome   = cfg?.Ponto?.Nome ?? "Ponto sem nome";
             _lblPonto.Text      = $"✓ {nome}";
