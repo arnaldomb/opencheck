@@ -5,10 +5,11 @@ import {
   getStatus,
   getQrCodeImage,
   listGroups,
+  disconnect,
   sendWhatsAppText,
   zapiConfigFrom,
 } from '../../infra/zapi/zapi.service.js'
-// (instância gerenciada pelo superadmin — ver superadmin.routes.ts)
+// (credenciais da instância gerenciadas pelo superadmin — ver superadmin.routes.ts)
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,22 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       data:  { whatsappGrupoJid: null, whatsappGrupoNome: null },
     })
     return { ok: true }
+  })
+
+  // ── POST /whatsapp/desconectar — derruba a sessão para reconectar com QR ──
+  // Mantém as credenciais da instância e o grupo/número configurados.
+  app.post('/whatsapp/desconectar', async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    const cfg = await getWppCfg(tenantId)
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return reply.status(400).send({ error: 'Instância WhatsApp não vinculada.' })
+
+    await disconnect(zapi)
+    await prisma.configNotificacao.updateMany({
+      where: { tenantId, tipo: 'WHATSAPP' },
+      data:  { whatsappInstStatus: 'DESCONECTADO' },
+    })
+    return { ok: true, status: 'DESCONECTADO' }
   })
 
   // ── POST /whatsapp/testar — envia mensagem de teste ───────────────────────

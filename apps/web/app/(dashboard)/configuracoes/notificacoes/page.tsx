@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import {
   ArrowLeft, Bell, CheckCircle2, Loader2, RefreshCw, Save,
-  Send, Shield, Smartphone, Users, Wifi, WifiOff, AlertCircle, QrCode,
+  Send, Shield, Smartphone, Users, Wifi, WifiOff, AlertCircle, QrCode, Unplug,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -58,6 +58,7 @@ export default function NotificacoesPage() {
   const [instStatus,   setInstStatus]   = useState<InstStatus>('SEM_INSTANCIA')
   const [qrCode,       setQrCode]       = useState<string | null>(null)
   const [conectando,   setConectando]   = useState(false)
+  const [desconectando, setDesconectando] = useState(false)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // WhatsApp — grupos
@@ -175,6 +176,23 @@ export default function NotificacoesPage() {
       setErro(String(err))
     } finally {
       setConectando(false)
+    }
+  }
+
+  // ── desconectar sessão (mantém vínculo — reconecta lendo novo QR) ───────────
+  async function desconectar() {
+    if (!confirm('Desconectar o WhatsApp? As notificações param até você reconectar lendo um novo QR code.')) return
+    setDesconectando(true); setErro('')
+    try {
+      await apiFetch('/config/notificacoes/whatsapp/desconectar', { method: 'POST' })
+      pararPolling()
+      setInstStatus('DESCONECTADO')
+      setQrCode(null)
+      setGrupos([])
+    } catch (err) {
+      setErro(String(err))
+    } finally {
+      setDesconectando(false)
     }
   }
 
@@ -426,6 +444,17 @@ export default function NotificacoesPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <button type="button" onClick={desconectar} disabled={desconectando}
+                className="btn-ghost flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 py-1">
+                {desconectando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                Desconectar WhatsApp
+              </button>
+              <p className="text-xs text-gray-400 mt-1">
+                A instância continua vinculada — para voltar, basta ler um novo QR code.
+              </p>
             </div>
           </div>
         )}

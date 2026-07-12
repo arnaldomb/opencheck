@@ -165,6 +165,26 @@ export async function superadminRoutes(app: FastifyInstance) {
     return { ok: true, status: conectado ? 'CONECTADO' : 'DESCONECTADO' }
   })
 
+  // Desconecta a sessão do WhatsApp sem remover o vínculo — o cliente
+  // reconecta lendo um novo QR code no painel dele.
+  app.post('/clientes/:id/whatsapp/desconectar', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const cfg = await prisma.configNotificacao.findFirst({
+      where: { tenantId: id, tipo: 'WHATSAPP' },
+      select: { zapiInstanceId: true, zapiToken: true, zapiClientToken: true },
+    })
+    const { disconnect, zapiConfigFrom } = await import('../../infra/zapi/zapi.service.js')
+    const zapi = zapiConfigFrom(cfg)
+    if (!zapi) return reply.status(400).send({ error: 'Instância não vinculada.' })
+
+    await disconnect(zapi)
+    await prisma.configNotificacao.updateMany({
+      where: { tenantId: id, tipo: 'WHATSAPP' },
+      data:  { whatsappInstStatus: 'DESCONECTADO' },
+    })
+    return { ok: true, status: 'DESCONECTADO' }
+  })
+
   app.delete('/clientes/:id/whatsapp', async (request) => {
     const { id } = request.params as { id: string }
     const cfg = await prisma.configNotificacao.findFirst({

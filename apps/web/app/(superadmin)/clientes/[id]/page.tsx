@@ -136,6 +136,22 @@ export default function ClienteDetailPage() {
     }
   }
 
+  async function desconectarWhatsapp() {
+    if (!confirm('Desconectar a sessão do WhatsApp deste cliente? O vínculo é mantido — o cliente reconecta lendo um novo QR code no painel dele.')) return
+    setRemovendoWpp(true); setErroWpp(''); setOkWpp('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/whatsapp/desconectar`, { method: 'POST', headers: auth() })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? `Erro ${res.status}`)
+      setWpp(w => ({ ...w, status: 'DESCONECTADO' }))
+      setOkWpp('Sessão desconectada — o cliente pode reconectar lendo um novo QR code.')
+    } catch (err) {
+      setErroWpp(String(err instanceof Error ? err.message : err))
+    } finally {
+      setRemovendoWpp(false)
+    }
+  }
+
   async function toggleAtivo() {
     if (!tenant) return
     await fetch(`${API}/superadmin/clientes/${id}`, {
@@ -438,14 +454,26 @@ export default function ClienteDetailPage() {
               <p className="text-xs text-gray-400">
                 O cliente conecta o aparelho e escolhe o grupo em <strong>Configurações → Notificações</strong> no painel dele.
               </p>
-              <button
-                onClick={removerWhatsapp}
-                disabled={removendoWpp}
-                className="btn-ghost text-red-500 hover:bg-red-50 flex items-center gap-2 text-sm"
-              >
-                {removendoWpp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                Remover vínculo
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                {wpp.status === 'CONECTADO' && (
+                  <button
+                    onClick={desconectarWhatsapp}
+                    disabled={removendoWpp}
+                    className="btn-outline flex items-center gap-2 text-sm text-orange-600 border-orange-200 hover:bg-orange-50"
+                  >
+                    {removendoWpp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                    Desconectar sessão
+                  </button>
+                )}
+                <button
+                  onClick={removerWhatsapp}
+                  disabled={removendoWpp}
+                  className="btn-ghost text-red-500 hover:bg-red-50 flex items-center gap-2 text-sm"
+                >
+                  {removendoWpp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Remover vínculo
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={salvarWhatsapp} className="card space-y-4">
