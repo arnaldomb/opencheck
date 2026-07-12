@@ -32,8 +32,8 @@ const TIPO_CFG: Record<string, { label: string; badgeCls: string; iconCls: strin
   PANICO:            { label: 'Pânico',             badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: AlertTriangle },
   PANICO_SILENCIOSO: { label: 'Pânico silencioso',  badgeCls: 'bg-red-100 text-red-700',       iconCls: 'text-red-600',    icon: Shield },
   COACAO:            { label: 'Coação',             badgeCls: 'bg-purple-100 text-purple-700', iconCls: 'text-purple-600', icon: Shield },
-  SUPERVISOR_ENTRADA:{ label: 'Ronda — Entrada',    badgeCls: 'bg-indigo-100 text-indigo-700', iconCls: 'text-indigo-500', icon: Shield },
-  SUPERVISOR_SAIDA:  { label: 'Ronda — Saída',      badgeCls: 'bg-indigo-50 text-indigo-500',  iconCls: 'text-indigo-400', icon: Shield },
+  SUPERVISOR_ENTRADA:{ label: 'Supervisor — Entrada', badgeCls: 'bg-indigo-100 text-indigo-700', iconCls: 'text-indigo-500', icon: Shield },
+  SUPERVISOR_SAIDA:  { label: 'Supervisor — Saída',   badgeCls: 'bg-indigo-50 text-indigo-500',  iconCls: 'text-indigo-400', icon: Shield },
   AVISO:             { label: 'Aviso',              badgeCls: 'bg-yellow-100 text-yellow-700', iconCls: 'text-yellow-500', icon: Bell },
   RESTAURACAO:       { label: 'Restauração',        badgeCls: 'bg-gray-100 text-gray-600',     iconCls: 'text-gray-400',   icon: RefreshCw },
   TESTE:             { label: 'Teste',              badgeCls: 'bg-gray-100 text-gray-500',     iconCls: 'text-gray-300',   icon: Wrench },
@@ -143,8 +143,8 @@ export default function EventosPage() {
                 <option value="ABERTURA_AUSENTE">Sem Abertura</option>
                 <option value="FECHAMENTO_CHECKIN">Fechamento</option>
                 <option value="FECHAMENTO_AUSENTE">Sem Fechamento</option>
-                <option value="SUPERVISOR_ENTRADA">Ronda — Entrada</option>
-                <option value="SUPERVISOR_SAIDA">Ronda — Saída</option>
+                <option value="SUPERVISOR_ENTRADA">Supervisor — Entrada</option>
+                <option value="SUPERVISOR_SAIDA">Supervisor — Saída</option>
                 <option value="FALHA">Falha</option>
                 <option value="PANICO">Pânico</option>
                 <option value="PANICO_SILENCIOSO">Pânico silencioso</option>

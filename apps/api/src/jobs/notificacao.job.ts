@@ -52,11 +52,12 @@ function buildMensagem(opts: {
   ponto: string
   operador: string | null
   statusAbertura?: string | null
+  statusFechamento?: string | null
   horaAbertura?: string | null
   toleranciaMinutos?: number | null
   deadlineBRT?: string | null
 }): string {
-  const { tipo, empresa, ponto, operador, statusAbertura } = opts
+  const { tipo, empresa, ponto, operador, statusAbertura, statusFechamento } = opts
 
   switch (tipo) {
     case 'CHECKIN':
@@ -90,6 +91,38 @@ function buildMensagem(opts: {
         fechamento: 'Ocorrência registrada para acompanhamento operacional.',
       })
     }
+
+    case 'FECHAMENTO_CHECKIN': {
+      if (statusFechamento === 'ATRASADO') {
+        return buildMensagemCorporativa({
+          titulo: '⚠️ *CHECK-OUT DE FECHAMENTO COM ATRASO*',
+          introducao: 'O fechamento da unidade foi registrado fora do período operacional estabelecido.',
+          empresa,
+          ponto,
+          operador,
+          fechamento: 'Ocorrência registrada para acompanhamento operacional.',
+        })
+      }
+
+      return buildMensagemCorporativa({
+        titulo: '✅ *CHECK-OUT DE FECHAMENTO CONFIRMADO*',
+        introducao: 'O fechamento da unidade foi realizado dentro do período operacional estabelecido.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Conformidade operacional registrada com sucesso.',
+      })
+    }
+
+    case 'FECHAMENTO_AUSENTE':
+      return buildMensagemCorporativa({
+        titulo: '🚨 *ALERTA DE FALTA DE FECHAMENTO*',
+        introducao: 'Não foi identificado o check-out de fechamento da unidade dentro do período operacional esperado.',
+        empresa,
+        ponto,
+        operador,
+        fechamento: 'Solicitamos a verificação imediata da situação para garantir o cumprimento dos procedimentos operacionais.',
+      })
 
     case 'PANICO':
       return buildMensagemCorporativa({
@@ -144,7 +177,7 @@ function buildMensagem(opts: {
     case 'SUPERVISOR_ENTRADA':
       return (
         '🛡️ *SUPERVISOR NA UNIDADE*\n\n' +
-        'O supervisor iniciou a ronda de supervisão na unidade.\n\n' +
+        'O supervisor iniciou a visita de supervisão na unidade.\n\n' +
         `Empresa: ${empresa}\n` +
         `Unidade: ${ponto}\n` +
         `Supervisor: ${operador ?? 'Não identificado'}\n` +
@@ -154,7 +187,7 @@ function buildMensagem(opts: {
 
     case 'SUPERVISOR_SAIDA':
       return (
-        '✅ *RONDA DE SUPERVISÃO CONCLUÍDA*\n\n' +
+        '✅ *VISITA DE SUPERVISÃO CONCLUÍDA*\n\n' +
         'O supervisor finalizou a visita à unidade.\n\n' +
         `Empresa: ${empresa}\n` +
         `Unidade: ${ponto}\n` +
@@ -234,11 +267,13 @@ export function notificacaoWorker(): void {
       nomeOperador = sup?.nome ?? null
     }
 
-    const statusAbertura = (meta?.statusAbertura as string | undefined) ?? null
+    const statusAbertura   = (meta?.statusAbertura   as string | undefined) ?? null
+    const statusFechamento = (meta?.statusFechamento as string | undefined) ?? null
 
     // ── WhatsApp ──────────────────────────────────────────────────────────────
     const wppEventos    = wppCfg?.whatsappEventos ?? []
-    const tipoFiltro    = tipo === 'ABERTURA_CHECKIN' ? 'CHECKIN' : tipo
+    // Check-ins de abertura/fechamento contam como o evento "CHECKIN" da config do cliente
+    const tipoFiltro    = tipo === 'ABERTURA_CHECKIN' || tipo === 'FECHAMENTO_CHECKIN' ? 'CHECKIN' : tipo
     const deveEnviar    = tipo !== 'FALHA' && (wppEventos.length === 0 || wppEventos.includes(tipo) || wppEventos.includes(tipoFiltro))
     const zapiCfg       = zapiConfigFrom(wppCfg)
     const estaConectado = wppCfg?.whatsappInstStatus === 'CONECTADO'
@@ -254,6 +289,7 @@ export function notificacaoWorker(): void {
         ponto:   ponto?.nome  ?? 'Ponto',
         operador: nomeOperador,
         statusAbertura,
+        statusFechamento,
       })
       if (wppCfg!.whatsappDestino) {
         try {

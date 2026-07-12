@@ -40,7 +40,7 @@ interface CtrlConfig {
 // ─── constantes ───────────────────────────────────────────────────────────────
 
 const EVENTOS_DISPONIVEIS = [
-  { value: 'CHECKIN',           label: '✅ Check-in' },
+  { value: 'CHECKIN',           label: '✅ Check-in / Check-out (abertura e fechamento)' },
   { value: 'ABERTURA_AUSENTE',  label: '🔔 Sem Abertura' },
   { value: 'FECHAMENTO_AUSENTE',label: '🔔 Sem Fechamento' },
   { value: 'PANICO',            label: '🚨 Pânico' },

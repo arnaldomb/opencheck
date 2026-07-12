@@ -15,8 +15,10 @@ const TIPOS_EVENTO = [
   { tipo: 'TESTE',               label: 'Teste',                       grupo: 'Alarmes' },
   { tipo: 'ABERTURA_CHECKIN',    label: 'Abertura — check-in no prazo',grupo: 'Abertura' },
   { tipo: 'ABERTURA_AUSENTE',    label: 'Abertura — não abriu',        grupo: 'Abertura' },
-  { tipo: 'FECHAMENTO_CHECKIN',  label: 'Fechamento — check-in',       grupo: 'Fechamento' },
+  { tipo: 'FECHAMENTO_CHECKIN',  label: 'Fechamento — check-out',      grupo: 'Fechamento' },
   { tipo: 'FECHAMENTO_AUSENTE',  label: 'Fechamento — não fechou',     grupo: 'Fechamento' },
+  { tipo: 'SUPERVISOR_ENTRADA',  label: 'Supervisor — entrada da visita', grupo: 'Supervisor' },
+  { tipo: 'SUPERVISOR_SAIDA',    label: 'Supervisor — saída da visita',   grupo: 'Supervisor' },
 ] as const
 
 const TIPOS_CTRLSAFE = ['alert', 'restore', 'test'] as const
@@ -30,7 +32,7 @@ interface Config {
   atualizadoEm: string
 }
 
-const GRUPOS = ['Ciclo', 'Alarmes', 'Abertura', 'Fechamento']
+const GRUPOS = ['Ciclo', 'Alarmes', 'Abertura', 'Fechamento', 'Supervisor']
 
 export default function EventosConfigPage() {
   const [config, setConfig]     = useState<Config | null>(null)

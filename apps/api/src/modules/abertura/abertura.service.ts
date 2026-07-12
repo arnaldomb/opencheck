@@ -338,6 +338,9 @@ export async function registrarFechamento(
     },
   })
 
+  const cfgGlobal = await prisma.configEventoGlobal.findUnique({ where: { id: 'global' } })
+  const codigoEvento = ((cfgGlobal?.codigos as Record<string, string> | null) ?? {})['FECHAMENTO_CHECKIN'] ?? '1410'
+
   const evento = await prisma.evento.create({
     data: {
       tenantId, pontoId,
@@ -345,6 +348,7 @@ export async function registrarFechamento(
       meta: {
         registroAberturaId: registro.id,
         statusFechamento,
+        codigoEvento,
         operadorId:     opts.operadorId   ?? null,
         supervisorId:   opts.supervisorId ?? null,
         nomeComputador: opts.nomeComputador ?? null,
@@ -354,7 +358,7 @@ export async function registrarFechamento(
   })
 
   await notificacaoQueue.add('fechamento-checkin', {
-    tenantId, pontoId, eventoId: evento.id, tipo: 'FECHAMENTO_CHECKIN',
+    tenantId, pontoId, eventoId: evento.id, tipo: 'FECHAMENTO_CHECKIN', codigoEvento,
   })
 
   return registro
