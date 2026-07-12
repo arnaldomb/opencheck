@@ -124,13 +124,21 @@ public class MainTrayContext : ApplicationContext
             var client = new OpenCheckClient(_config.ApiUrl, _config.AgentKeyPonto);
             var resultado = await client.SendAuxAsync(_config.AuxTipo, "AUX via aplicativo Windows");
             if (resultado.Aceito)
+            {
                 _logger.Registrar(true, "Evento AUX enviado com sucesso");
+                _tray.ShowBalloonTip(3000, "OpenCheck", "AUX confirmado", ToolTipIcon.Info);
+            }
             else
-                _logger.Registrar(false, resultado.Mensagem ?? "Erro ao enviar evento AUX");
+            {
+                var mensagem = resultado.Mensagem ?? "Erro ao enviar evento AUX";
+                _logger.Registrar(false, mensagem);
+                _tray.ShowBalloonTip(4000, "OpenCheck", mensagem, ToolTipIcon.Error);
+            }
         }
         catch (Exception ex)
         {
             _logger.Registrar(false, $"Erro ao enviar evento AUX: {ex.Message}");
+            _tray.ShowBalloonTip(4000, "OpenCheck", "Erro ao enviar evento AUX", ToolTipIcon.Error);
         }
     }
 
