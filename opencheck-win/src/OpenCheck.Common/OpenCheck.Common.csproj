@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OpenCheck.Common</AssemblyName>
+    <RootNamespace>OpenCheck.Common</RootNamespace>
+    <Product>OpenCheck</Product>
+    <AssemblyTitle>OpenCheck</AssemblyTitle>
+  </PropertyGroup>
+</Project>

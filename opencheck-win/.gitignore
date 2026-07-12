@@ -1,0 +1,4 @@
+bin/
+obj/
+installer/output/
+*.user
