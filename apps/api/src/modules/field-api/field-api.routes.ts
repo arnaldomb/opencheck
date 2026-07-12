@@ -14,14 +14,9 @@ import {
 import { prisma } from '@opencheck/database'
 
 const aberturaBodySchema = z.object({
-  codigo:         z.string().trim().regex(/^\d{4}$/, 'Código deve ter 4 dígitos').optional(),
-  pontoId:        z.string().trim().min(1).optional(),
+  codigo:         z.string().trim().regex(/^\d{4}$/, 'Código deve ter 4 dígitos'),
   nomeComputador: z.string().trim().max(200).optional(),
   usuarioWindows: z.string().trim().max(200).optional(),
-})
-
-const supervisorRegistroSchema = z.object({
-  pontoId: z.string().trim().min(1).optional(),
 })
 
 class FieldApiError extends Error {
@@ -38,46 +33,17 @@ function enviarErro(reply: FastifyReply, err: unknown) {
   return reply.status(e.status ?? 500).send({ aceito: false, erro: 'OPERACAO_FALHOU', mensagem: e.message ?? 'Erro interno' })
 }
 
-// Quem está registrando: código (operador ou supervisor), ou o dono da agentKey.
-async function resolverAtor(ctx: AgentContext, codigo?: string): Promise<AtorCodigo | null> {
-  if (codigo) {
-    const ator = await resolverCodigo(ctx.tenantId, codigo)
-    if (!ator) throw new FieldApiError(404, 'CODIGO_NAO_ENCONTRADO', 'Código não encontrado para operador ou supervisor')
-    return ator
-  }
-  if (ctx.operadorId) {
-    const op = await prisma.operador.findUnique({ where: { id: ctx.operadorId }, select: { id: true, nome: true } })
-    return op ? { ...op, tipo: 'OPERADOR' } : null
-  }
-  if (ctx.supervisorId) {
-    const sup = await prisma.supervisor.findUnique({ where: { id: ctx.supervisorId }, select: { id: true, nome: true } })
-    return sup ? { ...sup, tipo: 'SUPERVISOR' } : null
-  }
-  return null
+// Resolve quem está registrando a partir do código de 4 dígitos (operador ou supervisor).
+async function resolverAtor(ctx: AgentContext, codigo: string): Promise<AtorCodigo> {
+  const ator = await resolverCodigo(ctx.tenantId, codigo)
+  if (!ator) throw new FieldApiError(404, 'CODIGO_NAO_ENCONTRADO', 'Código não encontrado para operador ou supervisor')
+  return ator
 }
 
-// Em qual ponto a operação acontece. Chaves de operador/supervisor podem indicar
-// um pontoId do corpo (limitado aos pontos vinculados); chave de ponto é fixa.
-async function resolverPontoOperacao(ctx: AgentContext, bodyPontoId?: string): Promise<{ id: string; nome: string }> {
-  const pontoId = bodyPontoId ?? ctx.pontoId
-
-  if (bodyPontoId && bodyPontoId !== ctx.pontoId) {
-    if (ctx.tipo === 'PONTO') {
-      throw new FieldApiError(403, 'PONTO_INVALIDO', 'Chave de ponto não pode operar em outro ponto')
-    }
-    const vinculo = ctx.tipo === 'OPERADOR'
-      ? { operadores: { some: { id: ctx.operadorId! } } }
-      : { supervisores: { some: { id: ctx.supervisorId! } } }
-    const ponto = await prisma.ponto.findFirst({
-      where: { id: bodyPontoId, tenantId: ctx.tenantId, ativo: true, ...vinculo },
-      select: { id: true, nome: true },
-    })
-    if (!ponto) throw new FieldApiError(403, 'PONTO_NAO_VINCULADO', 'Ponto não encontrado ou não vinculado a este usuário')
-    return ponto
-  }
-
+// A loja é sempre a da agentKey — o app nunca escolhe ponto.
+async function resolverPontoOperacao(ctx: AgentContext): Promise<{ id: string; nome: string }> {
   const ponto = await prisma.ponto.findFirst({
-    where: { id: pontoId, tenantId: ctx.tenantId },
+    where: { id: ctx.pontoId, tenantId: ctx.tenantId },
     select: { id: true, nome: true },
   })
   if (!ponto) throw new FieldApiError(404, 'PONTO_NAO_ENCONTRADO', 'Ponto não encontrado')
@@ -179,8 +145,10 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     return { valido: true, ator }
   })
 
-  // POST /abertura/checkin — check-in de abertura via agentKey (ponto, operador ou supervisor)
-  // Body: { codigo?, pontoId?, nomeComputador?, usuarioWindows? }
+  // POST /abertura/checkin — botão "Check-in" do app Windows.
+  // Body: { codigo, pontoId?, nomeComputador?, usuarioWindows? }
+  // O código de 4 dígitos decide o fluxo: operador → abertura de loja (com prazo);
+  // supervisor → entrada de visita de supervisão (sem prazo, não é uma ronda).
   app.post('/abertura/checkin', async (request, reply) => {
     const parsed = aberturaBodySchema.safeParse(request.body ?? {})
     if (!parsed.success) {
@@ -191,12 +159,26 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     try {
       const [ator, ponto] = await Promise.all([
         resolverAtor(request.agentCtx, body.codigo),
-        resolverPontoOperacao(request.agentCtx, body.pontoId),
+        resolverPontoOperacao(request.agentCtx),
       ])
 
+      if (ator.tipo === 'SUPERVISOR') {
+        const registro = await registrarEntradaSupervisor(
+          { ...request.agentCtx, pontoId: ponto.id, operadorId: null, supervisorId: ator.id, tipo: 'SUPERVISOR' },
+          { pontoId: ponto.id, ip: request.ip, userAgent: request.headers['user-agent'] },
+        )
+        return reply.status(201).send({
+          aceito:        true,
+          tipo:          'ENTRADA',
+          registradoEm:  registro.registradoEm,
+          ponto:         { id: ponto.id, nome: ponto.nome },
+          registradoPor: ator,
+          mensagem: `Entrada de ${ator.nome} em ${ponto.nome} às ${horaSP(registro.registradoEm)}`,
+        })
+      }
+
       const registro = await registrarAberturaCheckin(request.agentCtx.tenantId, ponto.id, {
-        operadorId:     ator?.tipo === 'OPERADOR'   ? ator.id : undefined,
-        supervisorId:   ator?.tipo === 'SUPERVISOR' ? ator.id : undefined,
+        operadorId:     ator.id,
         nomeComputador: body.nomeComputador,
         usuarioWindows: body.usuarioWindows,
       })
@@ -217,8 +199,9 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /abertura/fechamento — fechamento via agentKey (ponto, operador ou supervisor)
-  // Body: { codigo?, pontoId?, nomeComputador?, usuarioWindows? }
+  // POST /abertura/fechamento — botão "Check-out" do app Windows.
+  // Body: { codigo, pontoId?, nomeComputador?, usuarioWindows? }
+  // Operador → fechamento de loja (com prazo); supervisor → saída da visita de supervisão.
   app.post('/abertura/fechamento', async (request, reply) => {
     const parsed = aberturaBodySchema.safeParse(request.body ?? {})
     if (!parsed.success) {
@@ -229,12 +212,26 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     try {
       const [ator, ponto] = await Promise.all([
         resolverAtor(request.agentCtx, body.codigo),
-        resolverPontoOperacao(request.agentCtx, body.pontoId),
+        resolverPontoOperacao(request.agentCtx),
       ])
 
+      if (ator.tipo === 'SUPERVISOR') {
+        const registro = await registrarSaidaSupervisor(
+          { ...request.agentCtx, pontoId: ponto.id, operadorId: null, supervisorId: ator.id, tipo: 'SUPERVISOR' },
+          { pontoId: ponto.id, ip: request.ip, userAgent: request.headers['user-agent'] },
+        )
+        return reply.status(201).send({
+          aceito:        true,
+          tipo:          'SAIDA',
+          registradoEm:  registro.registradoEm,
+          ponto:         { id: ponto.id, nome: ponto.nome },
+          registradoPor: ator,
+          mensagem: `Saída de ${ator.nome} de ${ponto.nome} às ${horaSP(registro.registradoEm)}`,
+        })
+      }
+
       const registro = await registrarFechamentoCheckin(request.agentCtx.tenantId, ponto.id, {
-        operadorId:     ator?.tipo === 'OPERADOR'   ? ator.id : undefined,
-        supervisorId:   ator?.tipo === 'SUPERVISOR' ? ator.id : undefined,
+        operadorId:     ator.id,
         nomeComputador: body.nomeComputador,
         usuarioWindows: body.usuarioWindows,
       })
@@ -265,63 +262,4 @@ export async function fieldApiRoutes(app: FastifyInstance) {
     return getConfig({ tenantId, pontoId, operadorId: null, supervisorId: null, tipo: 'PONTO' })
   })
 
-  // POST /supervisor/entrada — registro de entrada do supervisor
-  // Body: { pontoId? } — supervisores multi-ponto indicam onde estão
-  app.post('/supervisor/entrada', async (request, reply) => {
-    if (request.agentCtx.tipo !== 'SUPERVISOR') {
-      return reply.status(403).send({ erro: 'ACESSO_NEGADO', mensagem: 'Endpoint exclusivo para supervisores' })
-    }
-    const parsed = supervisorRegistroSchema.safeParse(request.body ?? {})
-    if (!parsed.success) {
-      return reply.status(400).send({ aceito: false, erro: 'DADOS_INVALIDOS', mensagem: 'Dados inválidos' })
-    }
-    try {
-      const ponto = await resolverPontoOperacao(request.agentCtx, parsed.data.pontoId)
-      const registro = await registrarEntradaSupervisor(request.agentCtx, {
-        pontoId:   ponto.id,
-        ip:        request.ip,
-        userAgent: request.headers['user-agent'],
-      })
-      return reply.status(201).send({
-        aceito:       true,
-        tipo:         'ENTRADA',
-        registradoEm: registro.registradoEm,
-        ponto:        { id: ponto.id, nome: ponto.nome },
-        supervisor:   { id: registro.supervisor.id, nome: registro.supervisor.nome },
-        mensagem:     `Entrada de ${registro.supervisor.nome} em ${ponto.nome} às ${horaSP(registro.registradoEm)}`,
-      })
-    } catch (err) {
-      return enviarErro(reply, err)
-    }
-  })
-
-  // POST /supervisor/saida — registro de saída do supervisor
-  // Body: { pontoId? }
-  app.post('/supervisor/saida', async (request, reply) => {
-    if (request.agentCtx.tipo !== 'SUPERVISOR') {
-      return reply.status(403).send({ erro: 'ACESSO_NEGADO', mensagem: 'Endpoint exclusivo para supervisores' })
-    }
-    const parsed = supervisorRegistroSchema.safeParse(request.body ?? {})
-    if (!parsed.success) {
-      return reply.status(400).send({ aceito: false, erro: 'DADOS_INVALIDOS', mensagem: 'Dados inválidos' })
-    }
-    try {
-      const ponto = await resolverPontoOperacao(request.agentCtx, parsed.data.pontoId)
-      const registro = await registrarSaidaSupervisor(request.agentCtx, {
-        pontoId:   ponto.id,
-        ip:        request.ip,
-        userAgent: request.headers['user-agent'],
-      })
-      return reply.status(201).send({
-        aceito:       true,
-        tipo:         'SAIDA',
-        registradoEm: registro.registradoEm,
-        ponto:        { id: ponto.id, nome: ponto.nome },
-        supervisor:   { id: registro.supervisor.id, nome: registro.supervisor.nome },
-        mensagem:     `Saída de ${registro.supervisor.nome} de ${ponto.nome} às ${horaSP(registro.registradoEm)}`,
-      })
-    } catch (err) {
-      return enviarErro(reply, err)
-    }
-  })
 }

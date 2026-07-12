@@ -1,0 +1,171 @@
+{
+  "info": {
+    "name": "OpenCheck — Field API (App Windows)",
+    "description": "Contrato da Field API (`/api/field/v1`) para o aplicativo Windows instalado na loja (kiosk).\n\n## Fluxo simplificado\n\nCada instalação representa **uma única loja (Ponto)**, identificada exclusivamente pelo `agentKeyPonto` configurado na instalação. O usuário nunca informa chave — a interface tem apenas:\n\n- Campo **Código** (4 dígitos)\n- Botão **Check-in**\n- Botão **Check-out**\n\nNão existe seleção de perfil, de loja, de operador ou de supervisor. Toda a inteligência fica no backend:\n\n```\nCódigo informado → servidor identifica o usuário\n  ├─ Operador   → Check-in = abertura da loja / Check-out = fechamento (regras de turno, tolerância, atraso, duplicidade)\n  └─ Supervisor → Check-in = entrada da visita / Check-out = saída (sem ronda, ciclo, timer, prazo ou tolerância — apenas auditoria)\n```\n\n## Autenticação\n\nTodas as requisições enviam o header `x-agent-key: {{agentKeyPonto}}`. A chave identifica loja, ponto, configuração, turnos e permissões. O computador permanece vinculado permanentemente a esse ponto.\n\nConfigure `baseUrl` e `agentKeyPonto` e rode a pasta 2 — é o contrato principal da integração.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "opencheck-field-api-v1"
+  },
+  "variable": [
+    { "key": "baseUrl",             "value": "http://localhost:3001",     "type": "string" },
+
+    { "key": "agentKeyPonto",       "value": "oc_tst_PONTO1PO",           "type": "string", "description": "Chave do ponto — Loja 1 (Portaria Principal). Turno seg-sex 08:00-20:00: fora desse turno, abertura/fechamento de operador retorna 'Sem turno configurado para hoje'." },
+    { "key": "agentKeyPontoLoja2",  "value": "oc_tst_PONTO2PO",           "type": "string", "description": "Loja 2 (Portaria Secundária) — turno seg-sex 08:00-18:00" },
+    { "key": "agentKeyPontoLoja3",  "value": "oc_tst_PONTO3GU",           "type": "string", "description": "Loja 3 (Guarita Estacionamento) — turno todos os dias 08:00-22:00. Use esta para testar abertura/fechamento em qualquer dia da semana." },
+
+    { "key": "codigo",              "value": "8097",                     "type": "string", "description": "Código de 4 dígitos digitado pelo usuário — padrão: Arnaldo Mesquita (supervisor), funciona em qualquer dia pois visita não depende de turno" },
+    { "key": "codigoOperadorLoja1", "value": "3270",                     "type": "string", "description": "João Silva — operador da Loja 1 (turno seg-sex)" },
+    { "key": "codigoOperadorLoja2", "value": "1706",                     "type": "string", "description": "Marcos Oliveira — operador da Loja 2 (turno seg-sex)" },
+    { "key": "codigoOperadorLoja3", "value": "5421",                     "type": "string", "description": "Roberto Costa — operador da Loja 3 (todos os dias); use com agentKeyPontoLoja3 para testar abertura/fechamento em qualquer dia" },
+    { "key": "codigoSupervisor",    "value": "8097",                     "type": "string", "description": "Arnaldo Mesquita — mesmo valor de {{codigo}}" },
+
+    { "key": "nomeComputador",      "value": "DESKTOP-LOJA01",            "type": "string", "description": "Nome da máquina Windows (auditoria)" },
+    { "key": "usuarioWindows",      "value": "loja01.operador",           "type": "string", "description": "Usuário logado no Windows (auditoria)" }
+  ],
+  "item": [
+
+    {
+      "name": "1. Inicialização",
+      "description": "Chamadas de inicialização do app: buscar a configuração do ponto (nome da loja, turnos, horários) para montar a tela.",
+      "item": [
+        {
+          "name": "GET /config — configuração completa do ponto",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/config", "host": ["{{baseUrl}}"], "path": ["api","field","v1","config"] },
+            "description": "Retorna nome da loja/empresa, turnos de abertura/fechamento, status do dia (statusLojaHoje) e horário do servidor. Chamar na inicialização do app para exibir o nome da loja e os horários."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /config/ciclo — polling leve (status abertura/fechamento do dia)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": { "raw": "{{baseUrl}}/api/field/v1/config/ciclo", "host": ["{{baseUrl}}"], "path": ["api","field","v1","config","ciclo"] },
+            "description": "Versão leve do /config para polling periódico: turnos + statusLojaHoje (abertura já registrada? fechamento pendente?). Use para atualizar a tela sem baixar a config completa."
+          },
+          "response": []
+        }
+      ]
+    },
+
+    {
+      "name": "2. Check-in / Check-out",
+      "description": "O contrato principal do app. O usuário digita o código de 4 dígitos e aperta Check-in ou Check-out — o servidor identifica se o código é de operador ou supervisor e executa a ação correta:\n\n- **Operador** → Check-in = abertura da loja / Check-out = fechamento (com prazo/tolerância do turno)\n- **Supervisor** → Check-in = entrada da visita / Check-out = saída da visita (sem prazo)\n\nO app nunca precisa saber o perfil do usuário. A loja vem da `x-agent-key` — não há campo de ponto no corpo.",
+      "item": [
+        {
+          "name": "GET /abertura/codigo/:codigo — validar código ('Confirmar como Fulano?')",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-agent-key", "value": "{{agentKeyPonto}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/field/v1/abertura/codigo/{{codigo}}",
+              "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","codigo","{{codigo}}"]
+            },
+            "description": "Opcional, para UX: chame ao completar os 4 dígitos e exiba o nome antes de confirmar.\n\nResposta 200: { valido: true, ator: { id, nome, tipo: 'OPERADOR'|'SUPERVISOR' } }\nResposta 404: { valido: false, erro: 'CODIGO_NAO_ENCONTRADO' }"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /abertura/checkin — botão Check-in",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"{{usuarioWindows}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/checkin", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","checkin"] },
+            "description": "Body: `codigo` obrigatório (4 dígitos); `nomeComputador`/`usuarioWindows` opcionais (auditoria).\n\nResposta 201 — código de operador:\n{ aceito: true, tipo: 'ABERTURA', status: 'NO_PRAZO'|'ATRASADO', registradoEm, deadlineEm, ponto: {id, nome}, registradoPor: {id, nome, tipo}, mensagem }\n\nResposta 201 — código de supervisor:\n{ aceito: true, tipo: 'ENTRADA', registradoEm, ponto, registradoPor, mensagem } (sem deadline)\n\nErros: 400 DADOS_INVALIDOS (código ausente/malformado) · 404 CODIGO_NAO_ENCONTRADO · 400 'Sem turno de abertura configurado para hoje' (operador fora do turno) · 409 'Abertura já registrada para hoje'"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /abertura/fechamento — botão Check-out",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nomeComputador\": \"{{nomeComputador}}\",\n  \"usuarioWindows\": \"{{usuarioWindows}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/abertura/fechamento", "host": ["{{baseUrl}}"], "path": ["api","field","v1","abertura","fechamento"] },
+            "description": "Body: `codigo` obrigatório (4 dígitos); `nomeComputador`/`usuarioWindows` opcionais.\n\nResposta 201 — código de operador:\n{ aceito: true, tipo: 'FECHAMENTO', status: 'NO_PRAZO'|'ATRASADO', registradoEm, ponto, registradoPor, mensagem }\n\nResposta 201 — código de supervisor:\n{ aceito: true, tipo: 'SAIDA', registradoEm, ponto, registradoPor, mensagem }\n\nErros: 400 DADOS_INVALIDOS · 404 CODIGO_NAO_ENCONTRADO · 409 'Não há registro de abertura para este ponto hoje' · 409 'Fechamento já registrado para hoje'"
+          },
+          "response": []
+        }
+      ]
+    },
+
+    {
+      "name": "3. Pânico",
+      "description": "Botão de pânico do app — sempre visível e acionável em 1 toque/atalho de teclado. Dispara evento prioritário e notificação imediata (WhatsApp/CTRL+SAFE). Usa a mesma `x-agent-key` do ponto; `codigo` não é necessário.",
+      "item": [
+        {
+          "name": "POST /panico — PANICO (alarme, aciona central)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"PANICO\",\n  \"observacao\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] },
+            "description": "Resposta: { aceito: true, eventoId, tipo, codigoEvento, canalDisparado, serverTime }"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /panico — PANICO_SILENCIOSO (sem alarme audível)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"PANICO_SILENCIOSO\",\n  \"observacao\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /panico — COACAO (senha de coação / duress)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"COACAO\",\n  \"observacao\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/panico", "host": ["{{baseUrl}}"], "path": ["api","field","v1","panico"] }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /falha — reporta falha do dispositivo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-agent-key", "value": "{{agentKeyPonto}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"observacao\": \"Sem conexão com a internet por 10 minutos\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/field/v1/falha", "host": ["{{baseUrl}}"], "path": ["api","field","v1","falha"] }
+          },
+          "response": []
+        }
+      ]
+    }
+
+  ]
+}
