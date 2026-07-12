@@ -29,8 +29,8 @@ function enviarErro(reply: FastifyReply, err: unknown) {
   if (err instanceof FieldApiError) {
     return reply.status(err.status).send({ aceito: false, erro: err.erro, mensagem: err.message })
   }
-  const e = err as { message?: string; status?: number }
-  return reply.status(e.status ?? 500).send({ aceito: false, erro: 'OPERACAO_FALHOU', mensagem: e.message ?? 'Erro interno' })
+  const e = err as { message?: string; status?: number; erro?: string }
+  return reply.status(e.status ?? 500).send({ aceito: false, erro: e.erro ?? 'OPERACAO_FALHOU', mensagem: e.message ?? 'Erro interno' })
 }
 
 // Resolve quem está registrando a partir do código de 4 dígitos (operador ou supervisor).

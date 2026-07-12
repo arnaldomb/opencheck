@@ -32,6 +32,20 @@ function calcFechamentoDeadline(data: Date, horaFechamento: string, toleranciaMi
   return new Date(ms + toleranciaMinutos * 60_000)
 }
 
+// Início da janela permitida: horário configurado MENOS a tolerância.
+// Check-in/check-out antes disso é recusado (ex.: abertura 08:00, tolerância
+// 30min → janela 07:30–08:30; após 08:30 aceita como ATRASADO).
+function calcInicioJanela(data: Date, hora: string, toleranciaMinutos: number): Date {
+  const spDate = data.toISOString().slice(0, 10)
+  const [h, m] = hora.split(':').map(Number)
+  const ms = Date.parse(`${spDate}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`)
+  return new Date(ms - toleranciaMinutos * 60_000)
+}
+
+function horaSPFmt(d: Date): string {
+  return d.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+}
+
 function jobIdAbertura(pontoId: string, data: Date): string {
   return `abertura-${pontoId}-${data.toISOString().slice(0, 10)}`
 }
@@ -208,7 +222,18 @@ export async function registrarCheckin(
 
   const hoje = hojeEmSP()
   const deadline = calcDeadline(hoje, turno.horaAbertura, turno.toleranciaMinutos)
+  const inicioJanela = calcInicioJanela(hoje, turno.horaAbertura, turno.toleranciaMinutos)
   const agora = new Date()
+
+  // Janela de abertura: só a partir de (horaAbertura - tolerância).
+  // Depois do deadline continua aceitando, com status ATRASADO.
+  if (agora < inicioJanela) {
+    throw Object.assign(
+      new Error(`Ainda não é possível abrir — o check-in é liberado às ${horaSPFmt(inicioJanela)} (abertura ${turno.horaAbertura}, tolerância ${turno.toleranciaMinutos}min)`),
+      { status: 400, erro: 'FORA_DA_JANELA' },
+    )
+  }
+
   const status = agora <= deadline ? ('NO_PRAZO' as const) : ('ATRASADO' as const)
 
   const existing = await prisma.registroAbertura.findUnique({
@@ -320,7 +345,18 @@ export async function registrarFechamento(
     throw Object.assign(new Error('Fechamento já registrado para hoje'), { status: 409 })
 
   const deadline = calcFechamentoDeadline(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
+  const inicioJanela = calcInicioJanela(hoje, turno.horaFechamento, turno.toleranciaFechamentoMinutos)
   const agora = new Date()
+
+  // Janela de fechamento: só a partir de (horaFechamento - tolerância).
+  // Depois do deadline continua aceitando, com status ATRASADO.
+  if (agora < inicioJanela) {
+    throw Object.assign(
+      new Error(`Ainda não é possível fechar — o check-out é liberado às ${horaSPFmt(inicioJanela)} (fechamento ${turno.horaFechamento}, tolerância ${turno.toleranciaFechamentoMinutos}min)`),
+      { status: 400, erro: 'FORA_DA_JANELA' },
+    )
+  }
+
   const statusFechamento = agora <= deadline ? ('NO_PRAZO' as const) : ('ATRASADO' as const)
 
   // Cancela job de fechamento
