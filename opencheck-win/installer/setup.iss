@@ -41,7 +41,6 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDescription: "Atalhos adicionais:"
-Name: "autostart";   Description: "Iniciar automaticamente com o Windows (recomendado para quiosque)"; GroupDescription: "Inicialização:"; Flags: checkedonce
 
 [Files]
 Source: "{#BuildDir}\{#MyAppExeName}";                DestDir: "{app}"; Flags: ignoreversion
@@ -60,7 +59,7 @@ Name: "{commondesktop}\OpenCheck";     Filename: "{app}\{#MyAppExeName}"; IconFi
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "OpenCheck"; \
     ValueData: """{app}\{#MyAppExeName}"""; \
-    Flags: uninsdeletevalue; Tasks: autostart
+    Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; \

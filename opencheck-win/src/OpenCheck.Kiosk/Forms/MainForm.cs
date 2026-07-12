@@ -19,6 +19,7 @@ public class MainForm : Form
     private Button _btnCheckOut = null!;
     private Button _btnAux      = null!;
     private ListBox _lstEventos = null!;
+    private NotifyIcon _tray    = null!;
 
     public MainForm(KioskConfiguration config, EventLogger logger)
     {
@@ -26,6 +27,7 @@ public class MainForm : Form
         _logger = logger;
 
         BuildUI();
+        BuildTrayIcon();
         ApplyDisplayMode();
         CarregarEventosExistentes();
 
@@ -33,6 +35,7 @@ public class MainForm : Form
         HandleCreated += (_, _) => RegisterAuxHotkey();
         FormClosed += (_, _) => UnregisterAuxHotkey();
         Load += async (_, _) => await CarregarConfigRemotaAsync();
+        Resize += OnMainFormResize;
     }
 
     // ── layout ───────────────────────────────────────────────────────────────
@@ -160,8 +163,13 @@ public class MainForm : Form
     {
         if (_config.TelaCheia)
         {
+            // WindowState.Maximized respeita a barra de tarefas (área de trabalho);
+            // para o quiosque cobrir a tela inteira (inclusive a barra de tarefas),
+            // usamos os limites reais do monitor com a janela sem bordas por cima.
             FormBorderStyle = FormBorderStyle.None;
-            WindowState = FormWindowState.Maximized;
+            WindowState = FormWindowState.Normal;
+            var tela = Screen.FromControl(this).Bounds;
+            Bounds = tela;
             TopMost = true;
         }
         else
@@ -172,6 +180,14 @@ public class MainForm : Form
             Size = new Size(900, 700);
             StartPosition = FormStartPosition.CenterScreen;
         }
+    }
+
+    // Se o usuário conseguir minimizar (Win+D, Alt+Tab, etc.), o quiosque volta
+    // sozinho ao primeiro plano em tela cheia.
+    private void OnMainFormResize(object? sender, EventArgs e)
+    {
+        if (_config.TelaCheia && WindowState == FormWindowState.Minimized)
+            BeginInvoke(() => { WindowState = FormWindowState.Normal; ApplyDisplayMode(); Activate(); });
     }
 
     // ── eventos (painel "Últimos Eventos") ─────────────────────────────────────
@@ -350,5 +366,68 @@ public class MainForm : Form
         if (m.Msg == HotkeyManager.WM_HOTKEY && m.WParam.ToInt32() == HotkeyAux)
             _ = ExecutarAuxAsync();
         base.WndProc(ref m);
+    }
+
+    // ── bandeja do sistema ─────────────────────────────────────────────────────
+    // Ícone sempre presente, sem opção de sair — o quiosque não deve ser
+    // encerrado pelo operador/supervisor (mesmo padrão do app anterior).
+
+    private void BuildTrayIcon()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add(new ToolStripMenuItem("Abrir OpenCheck", null, (_, _) => RestaurarJanela()));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem("Configurações", null, OnConfiguracoesClick));
+
+        _tray = new NotifyIcon
+        {
+            Icon = DesenharIconeBandeja(),
+            Visible = true,
+            Text = "OpenCheck",
+            ContextMenuStrip = menu
+        };
+        _tray.DoubleClick += (_, _) => RestaurarJanela();
+    }
+
+    private void RestaurarJanela()
+    {
+        Show();
+        WindowState = FormWindowState.Normal;
+        ApplyDisplayMode();
+        BringToFront();
+        Activate();
+    }
+
+    private static Icon DesenharIconeBandeja()
+    {
+        var bmp = new Bitmap(32, 32);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+        g.FillEllipse(new SolidBrush(Color.FromArgb(15, 52, 96)), 1, 1, 30, 30);
+        using var font = new Font("Arial", 8f, FontStyle.Bold);
+        var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString("OC", font, Brushes.White, new RectangleF(0, 0, 32, 32), sf);
+        return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    // ── impedir fechamento pelo usuário ────────────────────────────────────────
+    // Alt+F4, botão fechar da barra de tarefas, etc. são ignorados. Só um
+    // desligamento/logoff do Windows ou Application.Exit() interno fecham de fato.
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (e.CloseReason != CloseReason.WindowsShutDown && e.CloseReason != CloseReason.ApplicationExitCall)
+        {
+            e.Cancel = true;
+            return;
+        }
+        base.OnFormClosing(e);
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
+        base.OnFormClosed(e);
     }
 }

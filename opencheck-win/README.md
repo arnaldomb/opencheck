@@ -8,6 +8,16 @@ Aplicativo Windows instalado no computador da loja para registrar, em modo quios
 
 Toda a identificação de quem está agindo (operador ou supervisor) e a decisão de qual ação executar ficam no servidor — o app só coleta um código de 4 dígitos e mostra o resultado.
 
+## Comportamento de quiosque
+
+Seguindo o mesmo padrão do app anterior (alerta-vigia-win):
+
+- **Não é possível fechar** — Alt+F4, fechar pela barra de tarefas, etc. são ignorados. Só um desligamento/logoff do Windows encerra o app de fato.
+- **Ícone na bandeja do sistema**, sempre presente, com menu **sem opção de sair** (só "Abrir OpenCheck" e "Configurações") — clique duplo também reabre a janela.
+- **Tela cheia real**: cobre a tela inteira, inclusive a área da barra de tarefas (não é apenas "maximizado", que deixaria a barra de tarefas visível).
+- Se o operador conseguir minimizar (Win+D, Alt+Tab), o quiosque volta sozinho para o primeiro plano em tela cheia.
+- **Inicia automaticamente com o Windows** — o instalador grava a entrada no Registro sempre, sem checkbox opcional.
+
 ## Estrutura
 
 ```
@@ -34,7 +44,7 @@ Na primeira execução (ou enquanto a Agent Key não estiver preenchida), o app 
 
 - **API URL** — ex.: `https://api.opencheck.ggtronic.com.br`
 - **Agent Key do Ponto** — a chave `oc_...` gerada no painel web em Pontos, para a loja onde o computador está instalado
-- **Tela cheia** — liga o modo quiosque (sem bordas, maximizado); pode ser desligado para testes locais
+- **Tela cheia** — liga o modo quiosque (sem bordas, cobrindo a tela inteira); pode ser desligado para testes locais
 - **Tipo de evento AUX** e **atalho de teclado** (padrão: `Ctrl+Alt+P`)
 
 Depois de configurado, o app não pede mais nada nas telas do dia a dia — os operadores/supervisores só digitam o código de 4 dígitos.
@@ -54,7 +64,7 @@ Gera `installer/output/OpenCheck_Setup_1.0.0.exe`. O instalador:
 
 - Detecta instalação anterior e oferece reparar/atualizar ou remover
 - Cria atalho opcional na Área de Trabalho
-- Cria entrada opcional no Registro para iniciar com o Windows (recomendado para quiosque)
+- Grava a entrada no Registro para iniciar com o Windows automaticamente (sempre, sem checkbox — é um quiosque)
 
 ## Contrato de API usado
 
