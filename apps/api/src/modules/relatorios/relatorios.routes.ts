@@ -214,7 +214,8 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       getRondas(tenantId, { supervisorId, pontoId, dataInicio, dataFim }),
     ])
 
-    const concluidas       = visitas.filter(v => !v.emAberto && v.entradaEm && v.saidaEm)
+    const concluidas       = visitas.filter(v => !v.emAberto && v.entradaEm && v.saidaEm && !v.fechamentoAutomatico)
+    const semCheckout      = visitas.filter(v => v.fechamentoAutomatico).length
     const emAberto         = visitas.filter(v => v.emAberto).length
     const saidasSemEntrada = visitas.filter(v => !v.entradaEm).length
     const tempoTotal       = concluidas.reduce((acc, v) => acc + (v.duracaoMinutos ?? 0), 0)
@@ -229,6 +230,7 @@ export async function relatoriosRoutes(app: FastifyInstance) {
       resumo: {
         totalVisitas:       visitas.length,
         concluidas:         concluidas.length,
+        semCheckout,
         emAberto,
         saidasSemEntrada,
         tempoTotalMinutos:  tempoTotal,

@@ -14,6 +14,7 @@ interface Visita {
   saidaEm: string | null
   duracaoMinutos: number | null
   emAberto: boolean
+  fechamentoAutomatico: boolean
 }
 
 interface RondasResponse {
@@ -161,6 +162,10 @@ export default function RondasPage() {
                   <td className="px-4 py-3">
                     {v.emAberto ? (
                       <span className="badge-yellow inline-flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Em aberto</span>
+                    ) : v.fechamentoAutomatico ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700" title="Sem check-out do supervisor — visita encerrada junto com o fechamento da loja">
+                        <AlertTriangle className="h-3 w-3" /> Sem check-out
+                      </span>
                     ) : !v.entradaEm ? (
                       <span className="badge-gray">Saída sem entrada</span>
                     ) : (

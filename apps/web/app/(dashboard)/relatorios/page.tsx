@@ -63,6 +63,7 @@ interface VisitaRonda {
   pontoId: string; pontoNome: string
   entradaEm: string | null; saidaEm: string | null
   duracaoMinutos: number | null; emAberto: boolean
+  fechamentoAutomatico: boolean
 }
 interface RelatorioRondas {
   geradoEm: string
@@ -70,7 +71,7 @@ interface RelatorioRondas {
   periodo: { de: string; ate: string }
   supervisores: SupervisorItem[]
   resumo: {
-    totalVisitas: number; concluidas: number; emAberto: number; saidasSemEntrada: number
+    totalVisitas: number; concluidas: number; semCheckout: number; emAberto: number; saidasSemEntrada: number
     tempoTotalMinutos: number; tempoMedioMinutos: number
     pontosVisitados: number; supervisoresAtivos: number
   }
@@ -85,6 +86,7 @@ function fmtDuracao(min: number | null) {
 
 function statusVisita(v: VisitaRonda): string {
   if (v.emAberto) return 'Em aberto'
+  if (v.fechamentoAutomatico) return 'Sem check-out'
   if (!v.entradaEm) return 'Saída sem entrada'
   return 'Concluída'
 }
@@ -431,6 +433,7 @@ async function gerarPDFRondas(dados: RelatorioRondas) {
   const cards = [
     { label: 'Total de visitas',   value: String(dados.resumo.totalVisitas) },
     { label: 'Concluídas',         value: String(dados.resumo.concluidas) },
+    { label: 'Sem check-out',      value: String(dados.resumo.semCheckout) },
     { label: 'Em aberto',          value: String(dados.resumo.emAberto) },
     { label: 'Tempo total',        value: fmtDuracao(dados.resumo.tempoTotalMinutos) },
     { label: 'Permanência média',  value: fmtDuracao(dados.resumo.tempoMedioMinutos) },
@@ -469,6 +472,7 @@ async function gerarPDFRondas(dados: RelatorioRondas) {
         const val = String(data.cell.raw)
         if (val === 'Concluída') doc.setTextColor(22, 163, 74)
         else if (val === 'Em aberto') doc.setTextColor(202, 138, 4)
+        else if (val === 'Sem check-out') doc.setTextColor(234, 88, 12)
         else doc.setTextColor(220, 38, 38)
       }
     },
@@ -503,6 +507,7 @@ async function gerarExcelRondas(dados: RelatorioRondas) {
     ['RESUMO'],
     ['Total de visitas',    dados.resumo.totalVisitas],
     ['Concluídas',          dados.resumo.concluidas],
+    ['Sem check-out',       dados.resumo.semCheckout],
     ['Em aberto',           dados.resumo.emAberto],
     ['Saídas sem entrada',  dados.resumo.saidasSemEntrada],
     ['Tempo total',         fmtDuracao(dados.resumo.tempoTotalMinutos)],
@@ -826,10 +831,11 @@ export default function RelatoriosPage() {
       {/* Preview Rondas */}
       {aba === 'rondas' && previewRo && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {[
               { label: 'Visitas',            value: previewRo.resumo.totalVisitas,               color: 'text-ggtech-blue' },
               { label: 'Concluídas',         value: previewRo.resumo.concluidas,                  color: 'text-green-600' },
+              { label: 'Sem check-out',      value: previewRo.resumo.semCheckout,                 color: previewRo.resumo.semCheckout > 0 ? 'text-orange-600' : 'text-gray-600' },
               { label: 'Em aberto',          value: previewRo.resumo.emAberto,                    color: previewRo.resumo.emAberto > 0 ? 'text-yellow-600' : 'text-gray-600' },
               { label: 'Tempo total',        value: fmtDuracao(previewRo.resumo.tempoTotalMinutos), color: 'text-gray-700' },
               { label: 'Permanência média',  value: fmtDuracao(previewRo.resumo.tempoMedioMinutos), color: 'text-gray-700' },
@@ -878,6 +884,7 @@ export default function RelatoriosPage() {
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             st === 'Concluída' ? 'bg-green-100 text-green-700'
                             : st === 'Em aberto' ? 'bg-yellow-100 text-yellow-700'
+                            : st === 'Sem check-out' ? 'bg-orange-100 text-orange-700'
                             : 'bg-red-100 text-red-700'
                           }`}>
                             {st}

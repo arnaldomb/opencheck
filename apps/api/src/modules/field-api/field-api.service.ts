@@ -585,6 +585,33 @@ async function registrarMovimentoSupervisor(
   if (!supervisorId) throw new Error('supervisorId ausente no contexto')
   const pontoId = opts.pontoId ?? ctx.pontoId
 
+  // Sequência ENTRADA→SAIDA: evita entrada duplicada no dia e saída órfã.
+  // Entrada em aberto de dia anterior não bloqueia (é fechada junto com a loja).
+  const ultimo = await prisma.registroSupervisor.findFirst({
+    where: { tenantId, supervisorId, pontoId },
+    orderBy: { registradoEm: 'desc' },
+    select: { tipo: true, registradoEm: true },
+  })
+  const mesmoDiaSP = (d: Date) =>
+    d.toLocaleDateString('en-CA', { timeZone: TZ }) === new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+
+  if (tipo === 'ENTRADA') {
+    if (ultimo?.tipo === 'ENTRADA' && mesmoDiaSP(ultimo.registradoEm)) {
+      const hora = ultimo.registradoEm.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+      throw Object.assign(
+        new Error(`Entrada já registrada às ${hora} — faça o check-out antes de uma nova entrada`),
+        { status: 409, erro: 'VISITA_JA_ABERTA' },
+      )
+    }
+  } else {
+    if (!ultimo || ultimo.tipo !== 'ENTRADA') {
+      throw Object.assign(
+        new Error('Nenhuma entrada em aberto — registre o check-in de chegada primeiro'),
+        { status: 409, erro: 'SEM_VISITA_ABERTA' },
+      )
+    }
+  }
+
   const registro = await prisma.registroSupervisor.create({
     data: {
       supervisorId, pontoId, tenantId, tipo,

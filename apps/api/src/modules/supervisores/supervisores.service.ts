@@ -9,6 +9,9 @@ export interface VisitaSupervisor {
   saidaEm: Date | null
   duracaoMinutos: number | null
   emAberto: boolean
+  // Supervisor não fez check-out: a visita foi encerrada junto com o
+  // fechamento da loja (saidaEm = fechamentoEm do RegistroAbertura do dia).
+  fechamentoAutomatico: boolean
 }
 
 export interface RondasOpts {
@@ -47,7 +50,7 @@ export async function getRondas(tenantId: string, opts: RondasOpts): Promise<Vis
         supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
         pontoId: r.pontoId, pontoNome: r.ponto.nome,
         entradaEm: r.registradoEm, saidaEm: null,
-        duracaoMinutos: null, emAberto: true,
+        duracaoMinutos: null, emAberto: true, fechamentoAutomatico: false,
       }) - 1)
     } else {
       const idx = abertas.get(chave)
@@ -62,8 +65,43 @@ export async function getRondas(tenantId: string, opts: RondasOpts): Promise<Vis
           supervisorId: r.supervisorId, supervisorNome: r.supervisor.nome,
           pontoId: r.pontoId, pontoNome: r.ponto.nome,
           entradaEm: null, saidaEm: r.registradoEm,
-          duracaoMinutos: null, emAberto: false,
+          duracaoMinutos: null, emAberto: false, fechamentoAutomatico: false,
         })
+      }
+    }
+  }
+
+  // Visita sem check-out é encerrada junto com o fechamento da loja:
+  // saída = fechamentoEm do RegistroAbertura do dia da entrada. Se a loja
+  // ainda não fechou, a visita permanece "em aberto".
+  const pendentes = visitas.filter(v => v.emAberto && v.entradaEm)
+  if (pendentes.length > 0) {
+    const TZ = 'America/Sao_Paulo'
+    const dataSP = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: TZ })
+
+    const fechamentos = await prisma.registroAbertura.findMany({
+      where: {
+        tenantId,
+        pontoId: { in: [...new Set(pendentes.map(v => v.pontoId))] },
+        fechamentoEm: { not: null },
+        data: {
+          gte: new Date(`${dataSP(opts.dataInicio)}T00:00:00.000Z`),
+          lte: new Date(`${dataSP(opts.dataFim)}T00:00:00.000Z`),
+        },
+      },
+      select: { pontoId: true, data: true, fechamentoEm: true },
+    })
+    const fechamentoPorDia = new Map(
+      fechamentos.map(f => [`${f.pontoId}:${f.data.toISOString().slice(0, 10)}`, f.fechamentoEm!]),
+    )
+
+    for (const v of pendentes) {
+      const fechamentoEm = fechamentoPorDia.get(`${v.pontoId}:${dataSP(v.entradaEm!)}`)
+      if (fechamentoEm && fechamentoEm > v.entradaEm!) {
+        v.saidaEm = fechamentoEm
+        v.duracaoMinutos = Math.round((fechamentoEm.getTime() - v.entradaEm!.getTime()) / 60_000)
+        v.emAberto = false
+        v.fechamentoAutomatico = true
       }
     }
   }
