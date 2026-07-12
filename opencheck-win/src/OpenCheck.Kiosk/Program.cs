@@ -1,5 +1,4 @@
 using OpenCheck.Kiosk;
-using OpenCheck.Kiosk.Forms;
 
 Application.EnableVisualStyles();
 Application.SetCompatibleTextRenderingDefault(false);
@@ -8,22 +7,10 @@ Application.ThreadException += (_, e) => LogCrash(e.Exception);
 AppDomain.CurrentDomain.UnhandledException += (_, e) => LogCrash(e.ExceptionObject as Exception);
 
 var config = KioskConfiguration.Load();
-
-if (!config.IsConfigured)
-{
-    using var settings = new SettingsForm(config);
-    if (settings.ShowDialog() != DialogResult.OK || !config.IsConfigured)
-    {
-        MessageBox.Show(
-            "É necessário configurar a URL da API e a Agent Key do Ponto para iniciar o OpenCheck.",
-            "OpenCheck", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        Environment.Exit(1);
-    }
-    config.Save();
-}
-
 var logger = new EventLogger();
-Application.Run(new MainForm(config, logger));
+var ctx = new MainTrayContext(config, logger);
+
+Application.Run(ctx);
 
 static void LogCrash(Exception? ex)
 {

@@ -1,6 +1,6 @@
-# OpenCheck Windows — App de Quiosque
+# OpenCheck Windows
 
-Aplicativo Windows instalado no computador da loja para registrar, em modo quiosque:
+Aplicativo Windows instalado no computador da loja para registrar:
 
 - Check-in (abertura da loja, se o código for de operador; entrada da visita, se for de supervisor)
 - Check-out (fechamento da loja, ou saída da visita)
@@ -8,15 +8,13 @@ Aplicativo Windows instalado no computador da loja para registrar, em modo quios
 
 Toda a identificação de quem está agindo (operador ou supervisor) e a decisão de qual ação executar ficam no servidor — o app só coleta um código de 4 dígitos e mostra o resultado.
 
-## Comportamento de quiosque
+## Comportamento (igual ao app anterior, alerta-vigia-win)
 
-Seguindo o mesmo padrão do app anterior (alerta-vigia-win):
-
-- **Não é possível fechar** — Alt+F4, fechar pela barra de tarefas, etc. são ignorados. Só um desligamento/logoff do Windows encerra o app de fato.
-- **Ícone na bandeja do sistema**, sempre presente, com menu **sem opção de sair** (só "Abrir OpenCheck" e "Configurações") — clique duplo também reabre a janela.
-- **Tela cheia real**: cobre a tela inteira, inclusive a área da barra de tarefas (não é apenas "maximizado", que deixaria a barra de tarefas visível).
-- Se o operador conseguir minimizar (Win+D, Alt+Tab), o quiosque volta sozinho para o primeiro plano em tela cheia.
+- Roda residente na **bandeja do sistema** — o processo continua vivo mesmo com a janela fechada.
+- O menu da bandeja **não tem opção de sair** (só "Abrir OpenCheck" e "Configurações"), assim como o app anterior.
+- A janela **Status** (CHECK-IN / CHECK-OUT / AUX + últimos eventos) é uma janela comum: pode ser movida, minimizada e fechada normalmente. Fechar a janela não encerra o app — clique duplo no ícone da bandeja (ou "Abrir OpenCheck" no menu) reabre.
 - **Inicia automaticamente com o Windows** — o instalador grava a entrada no Registro sempre, sem checkbox opcional.
+- O atalho do AUX (padrão `Ctrl+Alt+P`) funciona mesmo com a janela Status fechada.
 
 ## Estrutura
 
@@ -24,7 +22,9 @@ Seguindo o mesmo padrão do app anterior (alerta-vigia-win):
 opencheck-win/
   src/
     OpenCheck.Common/   — cliente HTTP da Field API, modelos, gerenciador de atalhos globais
-    OpenCheck.Kiosk/     — app WinForms (tela principal, diálogo de código, configurações)
+    OpenCheck.Kiosk/
+      MainTrayContext.cs — contexto raiz: ícone da bandeja, atalho global do AUX, abre/fecha a janela Status
+      Forms/              — MainForm (janela Status), CodeEntryForm (diálogo de código), SettingsForm
   installer/             — script Inno Setup (setup.iss) + ícone + licença
 ```
 
@@ -40,14 +40,13 @@ O executável fica em `src/OpenCheck.Kiosk/bin/Release/net8.0-windows/OpenCheck.
 
 ## Configuração
 
-Na primeira execução (ou enquanto a Agent Key não estiver preenchida), o app abre a tela de Configurações automaticamente. É preciso informar:
+O app inicia direto na bandeja; se ainda não configurado, mostra um aviso (balão) sugerindo configurar. Pela bandeja, em **Configurações**, é preciso informar:
 
 - **API URL** — ex.: `https://api.opencheck.ggtronic.com.br`
 - **Agent Key do Ponto** — a chave `oc_...` gerada no painel web em Pontos, para a loja onde o computador está instalado
-- **Tela cheia** — liga o modo quiosque (sem bordas, cobrindo a tela inteira); pode ser desligado para testes locais
 - **Tipo de evento AUX** e **atalho de teclado** (padrão: `Ctrl+Alt+P`)
 
-Depois de configurado, o app não pede mais nada nas telas do dia a dia — os operadores/supervisores só digitam o código de 4 dígitos.
+Depois de configurado, o app não pede mais nada nas telas do dia a dia — os operadores/supervisores só digitam o código de 4 dígitos na janela Status.
 
 O arquivo de configuração fica em `%LOCALAPPDATA%\OpenCheck\config.json`; o histórico de eventos em `%LOCALAPPDATA%\OpenCheck\eventos.log`.
 
@@ -62,15 +61,16 @@ iscc setup.iss
 
 Gera `installer/output/OpenCheck_Setup_1.0.0.exe`. O instalador:
 
+- Instala em Program Files e cria os atalhos do Menu Iniciar / Desinstalar, igual a qualquer programa comum
 - Detecta instalação anterior e oferece reparar/atualizar ou remover
 - Cria atalho opcional na Área de Trabalho
-- Grava a entrada no Registro para iniciar com o Windows automaticamente (sempre, sem checkbox — é um quiosque)
+- Grava a entrada no Registro para iniciar com o Windows automaticamente (sempre, sem checkbox)
 
 ## Contrato de API usado
 
 Ver `postman.json` na raiz do repositório — pasta **"2. Check-in / Check-out"** é o contrato usado por este app:
 
-- `GET /api/field/v1/config` — nome da loja/empresa para o título da tela
+- `GET /api/field/v1/config` — nome da loja/empresa para o título da janela
 - `POST /api/field/v1/abertura/checkin` — `{ codigo, nomeComputador, usuarioWindows }`
 - `POST /api/field/v1/abertura/fechamento` — mesmo formato
 - `POST /api/field/v1/panico` — `{ tipo, observacao }`, sem código (ligado ao ponto, não a uma pessoa)

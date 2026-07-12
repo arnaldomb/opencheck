@@ -20,9 +20,6 @@ public class KioskConfiguration
     [JsonPropertyName("pontoNome")]
     public string PontoNome { get; set; } = string.Empty;
 
-    [JsonPropertyName("telaCheia")]
-    public bool TelaCheia { get; set; } = true;
-
     // PANICO | PANICO_SILENCIOSO | COACAO — tipo do evento enviado pelo botão AUX
     [JsonPropertyName("auxTipo")]
     public string AuxTipo { get; set; } = "PANICO_SILENCIOSO";

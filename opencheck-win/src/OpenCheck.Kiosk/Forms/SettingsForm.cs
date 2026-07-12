@@ -12,7 +12,6 @@ public class SettingsForm : Form
     private TextBox  _txtApiUrl    = null!;
     private TextBox  _txtAgentKey  = null!;
     private Label    _lblPonto     = null!;
-    private CheckBox _chkTelaCheia = null!;
     private ComboBox _cmbAuxTipo   = null!;
     private ComboBox _cmbAuxMod    = null!;
     private ComboBox _cmbAuxKey    = null!;
@@ -27,7 +26,7 @@ public class SettingsForm : Form
     private void BuildUI()
     {
         Text = "OpenCheck — Configurações";
-        Size = new Size(480, 500);
+        Size = new Size(480, 470);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -58,7 +57,7 @@ public class SettingsForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(22, 18, 22, 14),
             ColumnCount = 2,
-            RowCount = 10
+            RowCount = 9
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -66,12 +65,11 @@ public class SettingsForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r1 agent key
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r2 test btn
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // r3 ponto result
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));  // r4 tela cheia
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r5 section header
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r6 aux tipo
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r7 aux hotkey
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // r8 spacer
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));  // r9 buttons
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));  // r4 section header
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r5 aux tipo
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));  // r6 aux hotkey
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // r7 spacer
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));  // r8 buttons
 
         int r = 0;
 
@@ -122,12 +120,7 @@ public class SettingsForm : Form
         };
         layout.Controls.Add(_lblPonto, 1, r++);
 
-        // r4 — Tela cheia
-        layout.Controls.Add(new Label(), 0, r);
-        _chkTelaCheia = new CheckBox { Text = "Tela cheia (modo quiosque)", Dock = DockStyle.Fill, Checked = true };
-        layout.Controls.Add(_chkTelaCheia, 1, r++);
-
-        // r5 — Seção AUX
+        // r4 — Seção AUX
         var secPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(235, 241, 250), Margin = new Padding(0, 6, 0, 4) };
         secPanel.Controls.Add(new Label
         {
@@ -141,13 +134,13 @@ public class SettingsForm : Form
         layout.SetColumnSpan(secPanel, 2);
         r++;
 
-        // r6 — Tipo de evento AUX
+        // r5 — Tipo de evento AUX
         layout.Controls.Add(Lbl("Tipo de evento:"), 0, r);
         _cmbAuxTipo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
         _cmbAuxTipo.Items.AddRange(["PANICO_SILENCIOSO", "PANICO", "COACAO"]);
         layout.Controls.Add(_cmbAuxTipo, 1, r++);
 
-        // r7 — Atalho de teclado
+        // r6 — Atalho de teclado
         layout.Controls.Add(Lbl("Atalho:"), 0, r);
         var panelHk = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
         _cmbAuxMod = ModCombo();
@@ -155,11 +148,11 @@ public class SettingsForm : Form
         panelHk.Controls.AddRange([_cmbAuxMod, Plus(), _cmbAuxKey]);
         layout.Controls.Add(panelHk, 1, r++);
 
-        // r8 — spacer
+        // r7 — spacer
         layout.Controls.Add(new Label(), 0, r);
         layout.Controls.Add(new Label(), 1, r++);
 
-        // r9 — Salvar / Cancelar
+        // r8 — Salvar / Cancelar
         var btnPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0) };
         var btnCancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Width = 96, Height = 32, FlatStyle = FlatStyle.Flat };
         btnCancel.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
@@ -220,7 +213,6 @@ public class SettingsForm : Form
         _txtApiUrl.Text   = _config.ApiUrl;
         _txtAgentKey.Text = _config.AgentKeyPonto;
         _lblPonto.Text    = string.IsNullOrEmpty(_config.PontoNome) ? "" : _config.PontoNome;
-        _chkTelaCheia.Checked = _config.TelaCheia;
 
         _cmbAuxTipo.SelectedItem = _config.AuxTipo;
         if (_cmbAuxTipo.SelectedIndex < 0) _cmbAuxTipo.SelectedIndex = 0;
@@ -233,7 +225,6 @@ public class SettingsForm : Form
     {
         _config.ApiUrl              = _txtApiUrl.Text.Trim();
         _config.AgentKeyPonto       = _txtAgentKey.Text.Trim();
-        _config.TelaCheia           = _chkTelaCheia.Checked;
         _config.AuxTipo             = _cmbAuxTipo.SelectedItem?.ToString() ?? "PANICO_SILENCIOSO";
         _config.AuxHotkeyModifiers  = IndexToMod(_cmbAuxMod.SelectedIndex);
         _config.AuxHotkeyKey        = ItemToVk(_cmbAuxKey.SelectedItem?.ToString());
