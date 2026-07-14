@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Building2, User, CreditCard, Loader2, Save } from 'lucide-react'
 
-interface Plano { id: string; nome: string; valorMensal: number; pontosIncluidos: number }
+interface Plano { id: string; nome: string; faixaMin: number; faixaMax?: number | null; precoConta?: number | null }
 
 const EMPTY = {
   nome: '', email: '', cnpj: '', telefone: '',
   adminNome: '', adminEmail: '', adminSenha: '',
-  planoId: '', periodicidade: 'MENSAL', billingType: 'PIX',
+  planoId: '', quantidade: '', valorManual: '',
+  periodicidade: 'MENSAL', billingType: 'PIX',
   trialDias: '14',
 }
 
@@ -30,6 +31,14 @@ export default function NovoClientePage() {
       headers: { Authorization: `Bearer ${token}` },
     }).then(r => r.json()).then(setPlanos).catch(() => {})
   }, [])
+
+  const planoSelecionado = planos.find(p => p.id === form.planoId)
+  const quantidadeNum = Number(form.quantidade) || 0
+  const valorPreview = planoSelecionado && quantidadeNum > 0
+    ? (planoSelecionado.precoConta != null
+        ? quantidadeNum * Number(planoSelecionado.precoConta)
+        : (form.valorManual ? Number(form.valorManual) : null))
+    : null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -52,18 +61,24 @@ export default function NovoClientePage() {
       }
       const tenant = await tenantRes.json()
 
-      if (form.planoId) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/superadmin/clientes/${tenant.id}/assinatura`, {
+      if (form.planoId && form.quantidade) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/superadmin/clientes/${tenant.id}/assinatura`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             planoId: form.planoId,
+            quantidade: Number(form.quantidade),
             periodicidade: form.periodicidade,
             billingType: form.billingType,
             nextDueDate: new Date().toISOString().slice(0, 10),
             trialDias: Number(form.trialDias) || undefined,
+            valorManual: form.valorManual ? Number(form.valorManual) : undefined,
           }),
         })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error ?? 'Cliente criado, mas falhou ao criar assinatura')
+        }
       }
 
       router.push('/clientes')
@@ -142,17 +157,35 @@ export default function NovoClientePage() {
             <h2 className="font-heading font-semibold text-gray-800">Assinatura</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label className="label">Plano</label>
+            <div>
+              <label className="label">Plano (faixa de preço)</label>
               <select className="input" value={form.planoId} onChange={e => setForm(f => setF(f, 'planoId', e.target.value))}>
                 <option value="">Sem plano (configurar depois)</option>
                 {planos.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.nome} — R$ {Number(p.valorMensal).toFixed(2)}/mês ({p.pontosIncluidos} pontos)
+                    {p.nome} — {p.precoConta != null ? `R$ ${Number(p.precoConta).toFixed(2)}/conta` : 'negociado'}
+                    {' '}({p.faixaMax != null ? `${p.faixaMin}-${p.faixaMax}` : `acima de ${p.faixaMin - 1}`} contas)
                   </option>
                 ))}
               </select>
             </div>
+            <div>
+              <label className="label">Quantidade contratada (contas)</label>
+              <input type="number" min="1" className="input" placeholder="ex: 15"
+                value={form.quantidade} onChange={e => setForm(f => setF(f, 'quantidade', e.target.value))} />
+            </div>
+            {planoSelecionado?.precoConta == null && form.planoId && (
+              <div>
+                <label className="label">Valor mensal (R$) — plano sob cotação</label>
+                <input type="number" min="0" step="0.01" className="input"
+                  value={form.valorManual} onChange={e => setForm(f => setF(f, 'valorManual', e.target.value))} />
+              </div>
+            )}
+            {valorPreview != null && (
+              <div className="sm:col-span-2 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                Valor mensal estimado: <strong>R$ {valorPreview.toFixed(2)}</strong>
+              </div>
+            )}
             <div>
               <label className="label">Periodicidade</label>
               <select className="input" value={form.periodicidade} onChange={e => setForm(f => setF(f, 'periodicidade', e.target.value))}>

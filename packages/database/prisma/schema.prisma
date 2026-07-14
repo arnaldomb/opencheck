@@ -23,16 +23,20 @@ model Superadmin {
 // PLANOS
 // ─────────────────────────────────────
 
+// Faixa de preço por quantidade de contas contratadas (Single, Starter,
+// Profissional, Enterprise, Sob Cotação). O valor mensal da assinatura é
+// calculado como quantidade contratada × precoConta da faixa correspondente.
+// precoConta nulo = faixa "Sob Cotação", exige valor manual no superadmin.
 model Plano {
-  id              String   @id @default(cuid())
-  nome            String
-  descricao       String?
-  pontosIncluidos Int
-  valorMensal     Decimal  @db.Decimal(10, 2)
-  valorAnual      Decimal? @db.Decimal(10, 2)
-  limiteUsuarios  Int      @default(10)
-  ativo           Boolean  @default(true)
-  criadoEm       DateTime @default(now())
+  id          String   @id @default(cuid())
+  nome        String
+  descricao   String?
+  faixaMin    Int
+  faixaMax    Int?
+  precoConta  Decimal? @db.Decimal(10, 2)
+  ordem       Int      @default(0)
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
 
   assinaturas Assinatura[]
 }
@@ -99,6 +103,13 @@ model Assinatura {
   proximaCobrancaEm   DateTime?
   trialAteEm          DateTime?
   canceladaEm         DateTime?
+
+  // Dados de faturamento — cadastrados apenas pelo superadmin
+  razaoSocialFaturamento String?
+  cnpjFaturamento        String?
+  emailFaturamento       String?
+  diaVencimento          Int?
+
   criadoEm           DateTime    @default(now())
   atualizadoEm       DateTime    @updatedAt
 

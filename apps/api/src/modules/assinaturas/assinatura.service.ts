@@ -1,4 +1,4 @@
-import { prisma, Assinatura } from '@opencheck/database'
+import { prisma, Assinatura, Plano } from '@opencheck/database'
 import { addDays, format } from 'date-fns'
 import { asaasClient } from '../../infra/asaas/asaas.client.js'
 import type { BillingType } from '@opencheck/asaas-sdk'
@@ -8,11 +8,29 @@ interface CriarAssinaturaOpcoes {
   billingType: BillingType
   nextDueDate: string
   trialDias?: number
+  valorManual?: number
+}
+
+// Encontra a faixa de preço ativa cuja [faixaMin, faixaMax] cobre a
+// quantidade contratada. faixaMax nulo = sem limite superior ("Sob Cotação").
+export function resolverFaixaPorQuantidade(planos: Plano[], quantidade: number): Plano | undefined {
+  return planos
+    .filter(p => p.ativo && quantidade >= p.faixaMin && (p.faixaMax == null || quantidade <= p.faixaMax))
+    .sort((a, b) => a.faixaMin - b.faixaMin)[0]
+}
+
+// valor mensal = quantidade × preço por conta da faixa; faixas "Sob Cotação"
+// (precoConta nulo) exigem valor manual informado pelo superadmin.
+export function calcularValorMensal(plano: Plano, quantidade: number, valorManual?: number | null): number {
+  if (plano.precoConta != null) return quantidade * Number(plano.precoConta)
+  if (valorManual != null) return valorManual
+  throw new Error(`A faixa "${plano.nome}" é sob cotação — informe o valor mensal manualmente`)
 }
 
 export async function criarAssinatura(
   tenantId: string,
   planoId: string,
+  quantidade: number,
   opcoes: CriarAssinaturaOpcoes,
 ): Promise<Assinatura> {
   const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } })
@@ -34,10 +52,8 @@ export async function criarAssinatura(
     ? format(addDays(new Date(), opcoes.trialDias), 'yyyy-MM-dd')
     : opcoes.nextDueDate
 
-  const valor = opcoes.periodicidade === 'ANUAL'
-    ? Number(plano.valorAnual ?? Number(plano.valorMensal) * 12)
-    : Number(plano.valorMensal)
-
+  const valorMensal = calcularValorMensal(plano, quantidade, opcoes.valorManual)
+  const valor = opcoes.periodicidade === 'ANUAL' ? valorMensal * 12 : valorMensal
   const cycle = opcoes.periodicidade === 'ANUAL' ? 'YEARLY' : 'MONTHLY'
 
   const subscription = await asaasClient.createSubscription({
@@ -46,7 +62,7 @@ export async function criarAssinatura(
     nextDueDate: primeiraCobranca,
     value: valor,
     cycle,
-    description: `OpenCheck — Plano ${plano.nome} (${cycle === 'YEARLY' ? 'Anual' : 'Mensal'})`,
+    description: `OpenCheck — ${plano.nome} (${quantidade} contas, ${cycle === 'YEARLY' ? 'Anual' : 'Mensal'})`,
     externalReference: tenantId,
   })
 
@@ -58,7 +74,7 @@ export async function criarAssinatura(
       planoId,
       periodicidade: opcoes.periodicidade,
       status: opcoes.trialDias ? 'TRIAL' : 'ATIVA',
-      pontosContratados: plano.pontosIncluidos,
+      pontosContratados: quantidade,
       trialAteEm: opcoes.trialDias ? addDays(new Date(), opcoes.trialDias) : null,
       proximaCobrancaEm: new Date(subscription.nextDueDate),
     },
@@ -69,29 +85,57 @@ export async function criarAssinatura(
       status: opcoes.trialDias ? 'TRIAL' : 'ATIVA',
       asaasCustomerId: customerId,
       asaasSubscriptionId: subscription.id,
-      pontosContratados: plano.pontosIncluidos,
+      pontosContratados: quantidade,
       trialAteEm: opcoes.trialDias ? addDays(new Date(), opcoes.trialDias) : null,
       proximaCobrancaEm: new Date(subscription.nextDueDate),
     },
   })
 }
 
-export async function upgradePlano(tenantId: string, novoPlanoId: string): Promise<void> {
-  const assinatura = await prisma.assinatura.findUniqueOrThrow({ where: { tenantId } })
-  const novoPlano = await prisma.plano.findUniqueOrThrow({ where: { id: novoPlanoId } })
+interface DefinirQuantidadeOpcoes {
+  valorManual?: number
+  billingType?: BillingType
+  nextDueDate?: string
+  periodicidade?: 'MENSAL' | 'ANUAL'
+  trialDias?: number
+}
 
-  await asaasClient.updateSubscription(assinatura.asaasSubscriptionId!, {
-    value: Number(novoPlano.valorMensal),
-    description: `OpenCheck — Plano ${novoPlano.nome}`,
-    updatePendingPayments: true,
-  })
+// Ajusta a quantidade de contas contratadas de um cliente — resolve a faixa
+// de preço correspondente, recalcula o valor mensal e sincroniza com o Asaas
+// (atualiza a assinatura existente ou cria uma nova, se ainda não houver).
+export async function definirQuantidadeContratada(
+  tenantId: string,
+  quantidade: number,
+  opcoes: DefinirQuantidadeOpcoes = {},
+): Promise<Assinatura> {
+  if (quantidade < 1) throw new Error('Quantidade contratada deve ser maior que zero')
 
-  await prisma.assinatura.update({
-    where: { tenantId },
-    data: {
-      planoId: novoPlanoId,
-      pontosContratados: novoPlano.pontosIncluidos,
-    },
+  const planos = await prisma.plano.findMany({ where: { ativo: true } })
+  const plano = resolverFaixaPorQuantidade(planos, quantidade)
+  if (!plano) throw new Error('Nenhuma faixa de preço cadastrada cobre essa quantidade de contas')
+
+  const valorMensal = calcularValorMensal(plano, quantidade, opcoes.valorManual)
+  const existente = await prisma.assinatura.findUnique({ where: { tenantId } })
+
+  if (existente?.asaasSubscriptionId) {
+    const valor = existente.periodicidade === 'ANUAL' ? valorMensal * 12 : valorMensal
+    await asaasClient.updateSubscription(existente.asaasSubscriptionId, {
+      value: valor,
+      description: `OpenCheck — ${plano.nome} (${quantidade} contas)`,
+      updatePendingPayments: true,
+    })
+    return prisma.assinatura.update({
+      where: { tenantId },
+      data: { planoId: plano.id, pontosContratados: quantidade },
+    })
+  }
+
+  return criarAssinatura(tenantId, plano.id, quantidade, {
+    periodicidade: opcoes.periodicidade ?? 'MENSAL',
+    billingType: opcoes.billingType ?? 'PIX',
+    nextDueDate: opcoes.nextDueDate ?? format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+    trialDias: opcoes.trialDias,
+    valorManual: opcoes.valorManual,
   })
 }
 

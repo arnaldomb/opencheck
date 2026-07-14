@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@opencheck/database'
 import { superadminMiddleware } from '../../middleware/auth.middleware.js'
-import { criarAssinatura, upgradePlano, cancelarAssinatura } from '../assinaturas/assinatura.service.js'
+import { criarAssinatura, definirQuantidadeContratada, cancelarAssinatura } from '../assinaturas/assinatura.service.js'
 
 export async function superadminRoutes(app: FastifyInstance) {
   app.addHook('preHandler', superadminMiddleware)
@@ -64,22 +64,63 @@ export async function superadminRoutes(app: FastifyInstance) {
   // ── Assinaturas ───────────────────────────────────────────────────────────
   app.post('/clientes/:id/assinatura', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const body = request.body as Parameters<typeof criarAssinatura>[2] & { planoId: string }
-    const assinatura = await criarAssinatura(id, body.planoId, body)
-    return reply.status(201).send(assinatura)
+    const body = request.body as {
+      planoId: string; quantidade: number
+      periodicidade: 'MENSAL' | 'ANUAL'; billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD'
+      nextDueDate: string; trialDias?: number; valorManual?: number
+    }
+    try {
+      const assinatura = await criarAssinatura(id, body.planoId, body.quantidade, body)
+      return reply.status(201).send(assinatura)
+    } catch (err) {
+      return reply.status(400).send({ error: String(err instanceof Error ? err.message : err) })
+    }
   })
 
-  app.put('/clientes/:id/assinatura/upgrade', async (request) => {
+  // Ajusta a quantidade de contas contratadas — recalcula o valor pela faixa
+  // de preço correspondente e sincroniza com o Asaas.
+  app.put('/clientes/:id/assinatura/quantidade', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const { planoId } = request.body as { planoId: string }
-    await upgradePlano(id, planoId)
-    return { success: true }
+    const body = request.body as { quantidade: number; valorManual?: number }
+    if (!body.quantidade || body.quantidade < 1) {
+      return reply.status(400).send({ error: 'Quantidade contratada deve ser maior que zero' })
+    }
+    try {
+      const assinatura = await definirQuantidadeContratada(id, body.quantidade, { valorManual: body.valorManual })
+      return assinatura
+    } catch (err) {
+      return reply.status(400).send({ error: String(err instanceof Error ? err.message : err) })
+    }
   })
 
   app.delete('/clientes/:id/assinatura', async (request) => {
     const { id } = request.params as { id: string }
     await cancelarAssinatura(id)
     return { success: true }
+  })
+
+  // ── Dados de faturamento (somente superadmin) ─────────────────────────────
+  app.put('/clientes/:id/faturamento', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = request.body as {
+      razaoSocialFaturamento?: string; cnpjFaturamento?: string
+      emailFaturamento?: string; diaVencimento?: number
+    }
+    if (body.diaVencimento != null && (body.diaVencimento < 1 || body.diaVencimento > 28)) {
+      return reply.status(400).send({ error: 'Dia de vencimento deve estar entre 1 e 28' })
+    }
+    const assinatura = await prisma.assinatura.findUnique({ where: { tenantId: id } })
+    if (!assinatura) return reply.status(404).send({ error: 'Cliente ainda não possui assinatura' })
+
+    return prisma.assinatura.update({
+      where: { tenantId: id },
+      data: {
+        razaoSocialFaturamento: body.razaoSocialFaturamento,
+        cnpjFaturamento: body.cnpjFaturamento,
+        emailFaturamento: body.emailFaturamento,
+        diaVencimento: body.diaVencimento,
+      },
+    })
   })
 
   app.get('/clientes/:id/assinatura/cobrancas', async (request, reply) => {
@@ -282,18 +323,30 @@ export async function superadminRoutes(app: FastifyInstance) {
     return { success: true }
   })
 
-  // ── Planos ────────────────────────────────────────────────────────────────
-  app.get('/planos', async () => prisma.plano.findMany({ orderBy: { criadoEm: 'asc' } }))
+  // ── Planos (faixas de preço por quantidade de contas) ──────────────────────
+  app.get('/planos', async () => prisma.plano.findMany({
+    orderBy: { ordem: 'asc' },
+    include: { _count: { select: { assinaturas: true } } },
+  }))
 
   app.post('/planos', async (request, reply) => {
-    const body = request.body as { nome: string; descricao?: string; valorMensal: number; valorAnual?: number; pontosIncluidos: number; limiteUsuarios?: number }
+    const body = request.body as {
+      nome: string; descricao?: string; faixaMin: number; faixaMax?: number | null
+      precoConta?: number | null; ordem?: number
+    }
+    if (body.faixaMax != null && body.faixaMax < body.faixaMin) {
+      return reply.status(400).send({ error: 'Faixa máxima não pode ser menor que a faixa mínima' })
+    }
     const plano = await prisma.plano.create({ data: body })
     return reply.status(201).send(plano)
   })
 
   app.put('/planos/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const body = request.body as { nome?: string; descricao?: string; valorMensal?: number; valorAnual?: number | null; pontosIncluidos?: number; limiteUsuarios?: number; ativo?: boolean }
+    const body = request.body as {
+      nome?: string; descricao?: string; faixaMin?: number; faixaMax?: number | null
+      precoConta?: number | null; ordem?: number; ativo?: boolean
+    }
     const plano = await prisma.plano.findUnique({ where: { id } })
     if (!plano) return reply.status(404).send({ error: 'Plano não encontrado' })
     return prisma.plano.update({ where: { id }, data: body })

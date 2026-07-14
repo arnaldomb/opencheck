@@ -30,37 +30,50 @@ async function main() {
   })
   console.log('  ✅ Superadmin criado')
 
-  // ── PLANOS ─────────────────────────────────────────────────────────────────
-  const [planoStarter, planoPro] = await Promise.all([
+  // ── PLANOS (faixas de preço por quantidade de contas) ──────────────────────
+  const [planoSingle, planoStarter] = await Promise.all([
+    prisma.plano.upsert({
+      where: { id: 'plano-single' }, update: {},
+      create: {
+        id: 'plano-single', nome: 'Single',
+        descricao: '1 a 9 contas', faixaMin: 1, faixaMax: 9,
+        precoConta: 20.0, ordem: 1,
+      },
+    }),
     prisma.plano.upsert({
       where: { id: 'plano-starter' }, update: {},
       create: {
         id: 'plano-starter', nome: 'Starter',
-        descricao: 'Ideal para pequenas empresas',
-        pontosIncluidos: 3, valorMensal: 199.9, valorAnual: 1999.0,
-        limiteUsuarios: 5,
+        descricao: '10 a 49 contas', faixaMin: 10, faixaMax: 49,
+        precoConta: 17.32, ordem: 2,
       },
     }),
     prisma.plano.upsert({
       where: { id: 'plano-profissional' }, update: {},
       create: {
         id: 'plano-profissional', nome: 'Profissional',
-        descricao: 'Para empresas em crescimento',
-        pontosIncluidos: 10, valorMensal: 499.9, valorAnual: 4999.0,
-        limiteUsuarios: 20,
+        descricao: '50 a 99 contas', faixaMin: 50, faixaMax: 99,
+        precoConta: 15.0, ordem: 3,
       },
     }),
     prisma.plano.upsert({
       where: { id: 'plano-enterprise' }, update: {},
       create: {
         id: 'plano-enterprise', nome: 'Enterprise',
-        descricao: 'Sem limites para grandes operações',
-        pontosIncluidos: 50, valorMensal: 1499.9, valorAnual: 14999.0,
-        limiteUsuarios: 100,
+        descricao: '100 a 200 contas', faixaMin: 100, faixaMax: 200,
+        precoConta: 12.99, ordem: 4,
+      },
+    }),
+    prisma.plano.upsert({
+      where: { id: 'plano-sob-cotacao' }, update: {},
+      create: {
+        id: 'plano-sob-cotacao', nome: 'Sob Cotação',
+        descricao: 'Acima de 200 contas', faixaMin: 201, faixaMax: null,
+        precoConta: null, ordem: 5,
       },
     }),
   ])
-  console.log('  ✅ Planos criados')
+  console.log('  ✅ Planos (faixas de preço) criados')
 
   // ── TENANT 1 — Segurança Total ─────────────────────────────────────────────
   const tenant1 = await prisma.tenant.upsert({
@@ -75,11 +88,15 @@ async function main() {
   await prisma.assinatura.upsert({
     where: { tenantId: tenant1.id }, update: {},
     create: {
-      tenantId: tenant1.id, planoId: planoPro.id,
+      tenantId: tenant1.id, planoId: planoStarter.id,
       periodicidade: Periodicidade.MENSAL, status: AssinaturaStatus.ATIVA,
       pontosContratados: 10,
       proximaCobrancaEm: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
       externalReference: 'ext-tenant-seguranca-total',
+      razaoSocialFaturamento: 'Segurança Total Ltda',
+      cnpjFaturamento: '12.345.678/0001-90',
+      emailFaturamento: 'financeiro@segurancatotal.com.br',
+      diaVencimento: 5,
     },
   })
 
@@ -323,7 +340,7 @@ async function main() {
   await prisma.assinatura.upsert({
     where: { tenantId: tenant2.id }, update: {},
     create: {
-      tenantId: tenant2.id, planoId: planoStarter.id,
+      tenantId: tenant2.id, planoId: planoSingle.id,
       periodicidade: Periodicidade.MENSAL, status: AssinaturaStatus.TRIAL,
       pontosContratados: 3,
       trialAteEm: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -411,7 +428,7 @@ async function main() {
   await prisma.assinatura.upsert({
     where: { tenantId: tenant3.id }, update: {},
     create: {
-      tenantId: tenant3.id, planoId: planoPro.id,
+      tenantId: tenant3.id, planoId: planoStarter.id,
       periodicidade: Periodicidade.MENSAL, status: AssinaturaStatus.INADIMPLENTE,
       pontosContratados: 10, proximaCobrancaEm: diasAtras(5),
       externalReference: 'ext-tenant-guardpro',

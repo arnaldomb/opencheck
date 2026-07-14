@@ -23,4 +23,14 @@ export async function assinaturasRoutes(app: FastifyInstance) {
       take: 6,
     })
   })
+
+  // Tabela de faixas de preço (pacotes) para exibição na área do cliente —
+  // somente leitura; o cadastro é feito exclusivamente no painel superadmin.
+  app.get('/pacotes', async () => {
+    return prisma.plano.findMany({
+      where: { ativo: true },
+      orderBy: { ordem: 'asc' },
+      select: { id: true, nome: true, faixaMin: true, faixaMax: true, precoConta: true, ordem: true },
+    })
+  })
 }

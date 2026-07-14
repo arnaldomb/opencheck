@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Building2, Users, MapPin, CreditCard, CheckCircle, AlertCircle, Clock, XCircle,
-  Plus, X, Save, Loader2, KeyRound, Power, User, MessageCircle, Trash2,
+  Plus, X, Save, Loader2, KeyRound, Power, User, MessageCircle, Trash2, Receipt, Pencil,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -13,7 +13,9 @@ interface Tenant {
   id: string; nome: string; email: string; cnpj?: string; telefone?: string; ativo: boolean; criadoEm: string
   assinatura?: {
     status: string; periodicidade: string; pontosContratados: number; trialAteEm?: string; proximaCobrancaEm?: string
-    plano: { nome: string; valorMensal: number }
+    plano: { nome: string; precoConta?: number | null; faixaMin: number; faixaMax?: number | null }
+    razaoSocialFaturamento?: string | null; cnpjFaturamento?: string | null
+    emailFaturamento?: string | null; diaVencimento?: number | null
   }
   onboarding?: { concluido: boolean }
 }
@@ -59,7 +61,21 @@ export default function ClienteDetailPage() {
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
   const [usuarios, setUsuarios]   = useState<UsuarioTenant[]>([])
   const [loading, setLoading]     = useState(true)
-  const [tab, setTab]             = useState<'geral' | 'usuarios' | 'whatsapp' | 'assinatura' | 'cobrancas'>('geral')
+  const [tab, setTab]             = useState<'geral' | 'usuarios' | 'whatsapp' | 'assinatura' | 'faturamento' | 'cobrancas'>('geral')
+
+  // Assinatura — edição da quantidade contratada
+  const [editandoQtd, setEditandoQtd]   = useState(false)
+  const [formQtd, setFormQtd]           = useState({ quantidade: '', valorManual: '' })
+  const [salvandoQtd, setSalvandoQtd]   = useState(false)
+  const [erroQtd, setErroQtd]           = useState('')
+
+  // Faturamento — dados cadastrados exclusivamente pelo superadmin
+  const [editandoFat, setEditandoFat]   = useState(false)
+  const [formFat, setFormFat] = useState({
+    razaoSocialFaturamento: '', cnpjFaturamento: '', emailFaturamento: '', diaVencimento: '',
+  })
+  const [salvandoFat, setSalvandoFat]   = useState(false)
+  const [erroFat, setErroFat]           = useState('')
 
   // WhatsApp (Z-API)
   const [wpp, setWpp]             = useState<WhatsappInfo>({ vinculada: false })
@@ -162,6 +178,72 @@ export default function ClienteDetailPage() {
     setTenant(t => t ? { ...t, ativo: !t.ativo } : t)
   }
 
+  function abrirEdicaoQtd() {
+    setFormQtd({ quantidade: String(tenant?.assinatura?.pontosContratados ?? ''), valorManual: '' })
+    setErroQtd(''); setEditandoQtd(true)
+  }
+
+  async function salvarQuantidade(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvandoQtd(true); setErroQtd('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/assinatura/quantidade`, {
+        method: 'PUT',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quantidade: Number(formQtd.quantidade),
+          valorManual: formQtd.valorManual ? Number(formQtd.valorManual) : undefined,
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? `Erro ${res.status}`)
+      setEditandoQtd(false)
+      const t = await fetch(`${API}/superadmin/clientes/${id}`, { headers: auth() }).then(r => r.json())
+      setTenant(t)
+    } catch (err) {
+      setErroQtd(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSalvandoQtd(false)
+    }
+  }
+
+  function abrirEdicaoFat() {
+    const a = tenant?.assinatura
+    setFormFat({
+      razaoSocialFaturamento: a?.razaoSocialFaturamento ?? '',
+      cnpjFaturamento:        a?.cnpjFaturamento ?? '',
+      emailFaturamento:       a?.emailFaturamento ?? '',
+      diaVencimento:          a?.diaVencimento != null ? String(a.diaVencimento) : '',
+    })
+    setErroFat(''); setEditandoFat(true)
+  }
+
+  async function salvarFaturamento(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvandoFat(true); setErroFat('')
+    try {
+      const res = await fetch(`${API}/superadmin/clientes/${id}/faturamento`, {
+        method: 'PUT',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razaoSocialFaturamento: formFat.razaoSocialFaturamento || undefined,
+          cnpjFaturamento:        formFat.cnpjFaturamento || undefined,
+          emailFaturamento:       formFat.emailFaturamento || undefined,
+          diaVencimento:          formFat.diaVencimento ? Number(formFat.diaVencimento) : undefined,
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error ?? `Erro ${res.status}`)
+      setEditandoFat(false)
+      const t = await fetch(`${API}/superadmin/clientes/${id}`, { headers: auth() }).then(r => r.json())
+      setTenant(t)
+    } catch (err) {
+      setErroFat(String(err instanceof Error ? err.message : err))
+    } finally {
+      setSalvandoFat(false)
+    }
+  }
+
   async function criarUsuario(e: React.FormEvent) {
     e.preventDefault()
     setSalvandoUsuario(true); setErroUsuario('')
@@ -239,6 +321,7 @@ export default function ClienteDetailPage() {
     { key: 'usuarios',    label: `Usuários (${usuarios.length})` },
     { key: 'whatsapp',    label: 'WhatsApp' },
     { key: 'assinatura',  label: 'Assinatura' },
+    { key: 'faturamento', label: 'Faturamento' },
     { key: 'cobrancas',   label: 'Cobranças' },
   ] as const
 
@@ -527,7 +610,10 @@ export default function ClienteDetailPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900 text-lg">{ass.plano.nome}</h3>
-                  <p className="text-gray-500 text-sm">R$ {Number(ass.plano.valorMensal).toFixed(2)}/mês · {ass.pontosContratados} pontos</p>
+                  <p className="text-gray-500 text-sm">
+                    {ass.plano.precoConta != null ? `R$ ${Number(ass.plano.precoConta).toFixed(2)}/conta` : 'Valor negociado'}
+                    {' · '}{ass.pontosContratados} conta(s) contratada(s)
+                  </p>
                 </div>
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${st.cls}`}>
                   <st.Icon className="h-3.5 w-3.5" /> {st.label}
@@ -542,8 +628,116 @@ export default function ClienteDetailPage() {
                 )}
                 <div><span className="text-gray-400">Periodicidade: </span><strong>{ass.periodicidade}</strong></div>
               </div>
+
+              <div className="border-t pt-4">
+                {!editandoQtd ? (
+                  <button onClick={abrirEdicaoQtd} className="btn-outline flex items-center gap-2 text-sm">
+                    <Pencil className="h-3.5 w-3.5" /> Ajustar quantidade contratada
+                  </button>
+                ) : (
+                  <form onSubmit={salvarQuantidade} className="space-y-3 max-w-sm">
+                    <div>
+                      <label className="label">Quantidade contratada (contas) *</label>
+                      <input type="number" min="1" className="input" required
+                        value={formQtd.quantidade}
+                        onChange={e => setFormQtd(f => ({ ...f, quantidade: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Valor mensal manual (R$)</label>
+                      <input type="number" min="0" step="0.01" className="input"
+                        placeholder="Somente para faixa Sob Cotação"
+                        value={formQtd.valorManual}
+                        onChange={e => setFormQtd(f => ({ ...f, valorManual: e.target.value }))} />
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      A faixa de preço é resolvida automaticamente pela quantidade e o valor é sincronizado com o Asaas.
+                    </p>
+                    {erroQtd && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroQtd}</div>}
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setEditandoQtd(false)} className="btn-ghost flex-1">Cancelar</button>
+                      <button type="submit" disabled={salvandoQtd} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                        {salvandoQtd ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {salvandoQtd ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab: Faturamento (somente superadmin) */}
+      {tab === 'faturamento' && (
+        <div className="card space-y-4 max-w-xl">
+          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-ggtech-blue" />
+              <h3 className="font-heading font-semibold text-gray-800">Dados de faturamento</h3>
+            </div>
+            {!editandoFat && (
+              <button onClick={abrirEdicaoFat} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-ggtech-blue transition-colors" title="Editar dados de faturamento">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {!ass ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Cliente ainda não possui assinatura — cadastre a assinatura antes de definir dados de faturamento.</p>
+          ) : !editandoFat ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-400 text-xs">Razão social (faturamento)</p>
+                <p className="font-medium text-gray-800">{ass.razaoSocialFaturamento ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">CNPJ (faturamento)</p>
+                <p className="font-medium text-gray-800">{ass.cnpjFaturamento ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">E-mail de faturamento</p>
+                <p className="font-medium text-gray-800">{ass.emailFaturamento ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">Dia de vencimento</p>
+                <p className="font-medium text-gray-800">{ass.diaVencimento ? `Todo dia ${ass.diaVencimento}` : '—'}</p>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={salvarFaturamento} className="space-y-4">
+              <div>
+                <label className="label">Razão social para faturamento</label>
+                <input className="input" value={formFat.razaoSocialFaturamento}
+                  onChange={e => setFormFat(f => ({ ...f, razaoSocialFaturamento: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">CNPJ para faturamento</label>
+                <input className="input" placeholder="00.000.000/0001-00" value={formFat.cnpjFaturamento}
+                  onChange={e => setFormFat(f => ({ ...f, cnpjFaturamento: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">E-mail de faturamento</label>
+                <input type="email" className="input" value={formFat.emailFaturamento}
+                  onChange={e => setFormFat(f => ({ ...f, emailFaturamento: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Dia de vencimento (1–28)</label>
+                <input type="number" min="1" max="28" className="input" value={formFat.diaVencimento}
+                  onChange={e => setFormFat(f => ({ ...f, diaVencimento: e.target.value }))} />
+              </div>
+              {erroFat && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">{erroFat}</div>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditandoFat(false)} className="btn-ghost flex-1">Cancelar</button>
+                <button type="submit" disabled={salvandoFat} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                  {salvandoFat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {salvandoFat ? 'Salvando...' : 'Salvar dados de faturamento'}
+                </button>
+              </div>
+            </form>
+          )}
+          <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
+            Estes dados são visíveis apenas neste painel e usados para emissão de cobranças no Asaas — não são editáveis pelo cliente.
+          </p>
         </div>
       )}
 
