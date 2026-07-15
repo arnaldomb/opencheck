@@ -5,11 +5,17 @@ import { authMiddleware } from '../../middleware/auth.middleware.js'
 export async function assinaturasRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware)
 
+  // Expõe apenas o necessário para checagem de limites no painel do cliente
+  // (ex.: pontos/limite) — nome do plano, preço e faixas não são expostos ao
+  // cliente, pois a conta pode ser revendida por terceiros com preço próprio.
   app.get('/', async (request) => {
     const { tenantId } = request.user as { tenantId: string }
     return prisma.assinatura.findUnique({
       where: { tenantId },
-      include: { plano: true },
+      select: {
+        status: true, periodicidade: true, pontosContratados: true,
+        trialAteEm: true, proximaCobrancaEm: true,
+      },
     })
   })
 
@@ -21,16 +27,6 @@ export async function assinaturasRoutes(app: FastifyInstance) {
       where: { assinaturaId: assinatura.id },
       orderBy: { criadoEm: 'desc' },
       take: 6,
-    })
-  })
-
-  // Tabela de faixas de preço (pacotes) para exibição na área do cliente —
-  // somente leitura; o cadastro é feito exclusivamente no painel superadmin.
-  app.get('/pacotes', async () => {
-    return prisma.plano.findMany({
-      where: { ativo: true },
-      orderBy: { ordem: 'asc' },
-      select: { id: true, nome: true, faixaMin: true, faixaMax: true, precoConta: true, ordem: true },
     })
   })
 }

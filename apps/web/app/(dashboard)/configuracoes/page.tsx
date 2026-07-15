@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Bell, Users, ChevronRight, ImageIcon, CreditCard } from 'lucide-react'
+import { Bell, Users, ChevronRight, ImageIcon } from 'lucide-react'
 
 const ITEMS = [
   {
@@ -21,12 +21,6 @@ const ITEMS = [
     icon: Users,
     label: 'Usuários',
     desc: 'Gerencie usuários e permissões da sua empresa',
-  },
-  {
-    href: '/configuracoes/plano',
-    icon: CreditCard,
-    label: 'Plano',
-    desc: 'Veja seu plano contratado e a tabela de preços da plataforma',
   },
 ]
 
